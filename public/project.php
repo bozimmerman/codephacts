@@ -1,26 +1,37 @@
 <?php
+/*
+ Copyright 2025-2025 Bo Zimmerman
+ 
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+ 
+ http://www.apache.org/licenses/LICENSE-2.0
+ 
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+ */
 $config = require __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'config.php';
 
 $projectId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
-try {
+try
+{
     $pdo = new PDO(
         "mysql:host={$config['db']['host']};dbname={$config['db']['name']};charset={$config['db']['charset']}",
         $config['db']['user'],
         $config['db']['pass']
     );
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    // Get project info
     $stmt = $pdo->prepare("SELECT * FROM {$config['tables']['projects']} WHERE id = ?");
     $stmt->execute([$projectId]);
     $project = $stmt->fetch(PDO::FETCH_ASSOC);
     
-    if (!$project) {
+    if (!$project)
         die("Project not found");
-    }
-    
-    // Get latest statistics by language
     $stmt = $pdo->prepare("
         SELECT 
             s.language,
@@ -39,8 +50,6 @@ try {
     ");
     $stmt->execute([$projectId, $projectId]);
     $languages = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Get commit history
     $stmt = $pdo->prepare("
         SELECT 
             c.commit_hash,
@@ -56,7 +65,9 @@ try {
     $stmt->execute([$projectId]);
     $commits = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-} catch (PDOException $e) {
+} 
+catch (PDOException $e) 
+{
     die("Database error: " . $e->getMessage());
 }
 ?>
@@ -157,9 +168,11 @@ try {
     <script>
     <?php if (!empty($languages)): ?>
     const ctx = document.getElementById('languageChart');
-    new Chart(ctx, {
+    new Chart(ctx, 
+    {
         type: 'bar',
-        data: {
+        data: 
+        {
             labels: <?= json_encode(array_column($languages, 'language')) ?>,
             datasets: [{
                 label: 'Lines of Code',
@@ -167,11 +180,14 @@ try {
                 backgroundColor: '#007bff'
             }]
         },
-        options: {
+        options: 
+        {
             responsive: true,
             maintainAspectRatio: false,
-            scales: {
-                y: {
+            scales: 
+            {
+                y: 
+                {
                     beginAtZero: true
                 }
             }

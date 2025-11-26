@@ -73,30 +73,6 @@ function canAccessRepo($sourceType, $sourceUrl)
         throw new InvalidArgumentException("Unsupported source type: $sourceType");
 }
 
-function projectNeedsUpdate($sourceType, $sourceUrl, $lastCommit)
-{
-    if ($sourceType === 'git')
-    {
-        $cmd = "git ls-remote " . escapeshellarg($sourceUrl) . " HEAD";
-        $output = trim(shell_exec($cmd));
-        if (!$output)
-            return true;
-        $parts = preg_split('/\s+/', $output);
-        $latestCommit = $parts[0];
-        return ($latestCommit !== $lastCommit);
-    }
-    elseif ($sourceType === 'svn')
-    {
-        $cmd = "svn info " . escapeshellarg($sourceUrl) . " --show-item revision";
-        $latestRevision = trim(shell_exec($cmd));
-        if (!$latestRevision)
-            return true;
-        return ($latestRevision != $lastCommit);
-    }
-    else
-        throw new InvalidArgumentException("Unsupported source type: $sourceType");
-}
-
 function fetchCommits($sourceType, $sourceUrl, $lastCommit)
 {
     $commits = [];
@@ -159,7 +135,7 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit)
         {
             $revision = (string)$entry['revision'];
             $timestamp = strtotime((string)$entry->date);
-            $commits[] = ['commit' => $revision, 'commit' => $revision, 'timestamp' => $timestamp];
+            $commits[] = ['commit' => $revision, 'timestamp' => $timestamp];
         }
         return $commits;
     }
@@ -167,13 +143,64 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit)
     return false;
 }
 
-function fetchCommitCode($commit, $sourceType, $sourceUrl, $lastCommit, $tempDir)
+function getNextUnprocessedCommit($projectId, $sourceType, $sourceUrl, $includeCommitsOlderThan) 
+{
+    global $pdo, $config;
+    
+    $commitsTable = $config['tables']['commits'] ?? 'commits';
+    $statsTable = $config['tables']['statistics'] ?? 'statistics';
+    $stmt = $pdo->prepare("
+        SELECT c.commit_hash
+        FROM `$commitsTable` c
+        INNER JOIN `$statsTable` s ON s.commit_id = c.id
+        WHERE c.project_id = ?
+        ORDER BY c.commit_timestamp DESC
+        LIMIT 1
+    ");
+    $stmt->execute([$projectId]);
+    $lastCompleted = $stmt->fetchColumn();
+    $newCommits = fetchCommits($sourceType, $sourceUrl, $lastCompleted);
+    if ($newCommits === false || empty($newCommits))
+        return null;
+    $stmt = $pdo->prepare("
+        SELECT c.commit_hash,
+               UNIX_TIMESTAMP(c.processed_at) as processed_timestamp,
+               (SELECT COUNT(*) FROM `$statsTable` s WHERE s.commit_id = c.id) as has_stats
+        FROM `$commitsTable` c
+        WHERE c.project_id = ?
+    ");
+    $stmt->execute([$projectId]);
+    $tracked = [];
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) 
+    {
+        $tracked[$row['commit_hash']] = [
+            'processed_at' => $row['processed_timestamp'],
+            'has_stats' => $row['has_stats'] > 0
+        ];
+    }
+    $now = time();
+    $staleThreshold = $now - $includeCommitsOlderThan;
+    foreach ($newCommits as $commit) 
+    {
+        $commitHash = $commit['commit'];
+        if (!isset($tracked[$commitHash]))
+            return $commit;
+        $info = $tracked[$commitHash];
+        if (!$info['has_stats'] 
+        && $info['processed_at'] 
+        && $info['processed_at'] < $staleThreshold)
+            return $commit;
+    }
+    return null;
+}
+
+function fetchCommitCode($commit, $sourceType, $sourceUrl, $tempDir)
 {
     if ($sourceType === 'git')
     {
         $cloneCmd = "git clone --quiet " . escapeshellarg($sourceUrl) . " " . escapeshellarg($tempDir) . " 2>&1";
         $output = shell_exec($cloneCmd);
-        if (!is_dir($tempDir . DIRECTORY_SEPARATOR  . '.git'))
+        if (!is_dir($tempDir . DIRECTORY_SEPARATOR . '.git'))
         {
             error_log("Failed to clone git repo to temp dir: $output");
             return false;
@@ -220,16 +247,15 @@ function processProject($tempDir, $excludedDirs)
         if (!$file->isFile())
             continue;
         $pathname = $file->getPathname();
-        if (strpos($pathname, DIRECTORY_SEPARATOR  . '.git' . DIRECTORY_SEPARATOR ) !== false 
-        || strpos($pathname, DIRECTORY_SEPARATOR  . '.svn' . DIRECTORY_SEPARATOR ) !== false)
+        if (strpos($pathname, DIRECTORY_SEPARATOR . '.git' . DIRECTORY_SEPARATOR ) !== false 
+        || strpos($pathname, DIRECTORY_SEPARATOR . '.svn' . DIRECTORY_SEPARATOR ) !== false)
             continue;
         $relativePath = str_replace($tempDir, '', $pathname);
         $shouldSkip = false;
         foreach ($excludedDirs as $excludedDir)
         {
             // Check if the relative path starts with the excluded directory
-            if (strpos($relativePath, $excludedDir . DIRECTORY_SEPARATOR) === 0 ||
-                strpos($relativePath, $excludedDir) === 0)
+            if (strpos($relativePath, $excludedDir . DIRECTORY_SEPARATOR) === 0)
             {
                 $shouldSkip = true;
                 break;
@@ -362,23 +388,6 @@ function updateStatistics($projectId, $commitId, $report)
     }
 }
 
-function updateCommitStatistics($projectId, $commit)
-{
-    global $config, $pdo;
-    $commitsTable = $config['tables']['commits'] ?? 'project_commits';
-    
-    $commitHash = $commit['commit'];
-    $timestamp = $commit['timestamp'];
-    $stmt = $pdo->prepare("
-        INSERT INTO `$commitsTable` (project_id, commit_hash, commit_timestamp, processed_at)
-        VALUES (?, ?, FROM_UNIXTIME(?), NOW())
-        ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), processed_at = NOW()
-    ");
-    
-    $stmt->execute([$projectId, $commitHash, $timestamp]);
-    return $pdo->lastInsertId();
-}
-
 function updateProjectLastCommit($projectId, $latestCommit)
 {
     global $config, $pdo;
@@ -391,6 +400,30 @@ function updateProjectLastCommit($projectId, $latestCommit)
         WHERE id = ?
     ");
     $stmt->execute([$latestCommit, $projectId]);
+}
+
+function tryClaimCommit($projectId, $commit) 
+{
+    global $pdo, $config;
+    $commitsTable = $config['tables']['commits'] ?? 'commits';
+    try 
+    {
+        $commitHash = $commit['commit'];
+        $timestamp = $commit['timestamp'];
+        $stmt = $pdo->prepare("
+            INSERT INTO `$commitsTable`
+            (project_id, commit_hash, commit_timestamp, processed_at)
+            VALUES (?, ?, FROM_UNIXTIME(?), NOW())
+        ");
+        $stmt->execute([$projectId, $commitHash, $timestamp]);
+        return $pdo->lastInsertId();
+    } 
+    catch (PDOException $e) 
+    {
+        if ($e->getCode() == 23000)
+            return false;
+        throw $e; // Some other error
+    }
 }
 
 function rrmdir($dir)
@@ -433,12 +466,80 @@ foreach ($ruleFiles as $ruleFile)
     {
         $rules[$ext] = [
             'language' => $rule['language'],
-            'analyzer' => $rule['analyzer']
+            'analyzer' => $rule['analyzer'],
+            'detector' => isset($rule['detector']) ? $rule['detector'] : null
         ];
     }
 }
 
-try
+function processCommitForProject($project, $commit, $commitId) 
+{
+    outputProgress('commit_start', "Processing commit: {$commit['commit']}", [
+        'project' => $project['name'],
+        'commit' => $commit['commit']
+    ]);
+    $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'cp_' . getmypid() . '_' . $project['id'] . '_' . substr($commit['commit'], 0, 8);
+    mkdir($tempDir);
+    try 
+    {
+        $chk = fetchCommitCode( $commit, $project['source_type'], $project['source_url'], $tempDir );
+        if ($chk === false)
+        {
+            error_log("Failed to checkout commit {$commit['commit']} for {$project['name']}");
+            outputProgress('error', "Failed to checkout commit");
+            return false;
+        }
+        $excludedDirs = [];
+        if (!empty($project['excluded_dirs']))
+        {
+            $excludedDirs = is_array($project['excluded_dirs'])
+            ? $project['excluded_dirs']
+            : explode(',', $project['excluded_dirs']);
+        }
+        $rpt = processProject($tempDir, $excludedDirs);
+        if ($rpt === false) 
+        {
+            error_log("Failed to process files for {$project['name']}");
+            outputProgress('error', "Failed to process files");
+            return false;
+        }
+        // update statistics and mark as complete
+        updateStatistics($project['id'], $commitId, $rpt);
+        updateProjectLastCommit($project['id'], $commit['commit']);
+        outputProgress('commit_complete', "Completed commit", [
+            'project' => $project['name'],
+            'commit' => $commit['commit'],
+            'languages' => array_keys($rpt)
+        ]);
+        return true;
+    }
+    finally 
+    {
+        rrmdir($tempDir);
+    }
+}
+
+function tryProcessNextCommitForProject($project, $stale_timeout)
+{
+    if (!canAccessRepo($project['source_type'], $project['source_url']))
+    {
+        outputProgress('project_skip', "Cannot access repository for {$project['name']}");
+        return false;
+    }
+    $commit = getNextUnprocessedCommit($project['id'], $project['source_type'], $project['source_url'], $stale_timeout );
+    if (!$commit)
+        return false; // No work for this project
+    $commitId = tryClaimCommit($project['id'], $commit);
+    if ($commitId === false) 
+    {
+        outputProgress('commit_race', "Commit {$commit['commit']} claimed by another process");
+        return true; // There was work, just not for us - try again
+    }
+    return processCommitForProject($project, $commit, $commitId);
+}
+
+// Main processing loop
+try 
 {
     $pdo = new PDO(
         "mysql:host={$config['db']['host']};dbname={$config['db']['name']};charset={$config['db']['charset']}",
@@ -447,102 +548,36 @@ try
     );
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $projectsTable = $config['tables']['projects'];
-
-    $stmt = $pdo->prepare("
-        SELECT id, name, source_type, source_url, last_commit, excluded_dirs
-        FROM `$projectsTable`
-        ORDER BY id ASC
-    ");
-    $stmt->execute();
-    $projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    foreach ($projects as $project) 
+    $workFound = true;
+    $loopCount = 0;
+    while ($workFound) 
     {
-        outputProgress('project_start', "Starting project: {$project['name']}", ['project_id' => $project['id']]);
-        try 
+        $loopCount++;
+        $workFound = false;
+        outputProgress('loop_start', "Starting processing loop #{$loopCount}");
+        $stmt = $pdo->prepare("
+            SELECT id, name, source_type, source_url, last_commit, excluded_dirs
+            FROM `$projectsTable`
+            ORDER BY id ASC
+        ");
+        $stmt->execute();
+        $projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($projects as $project) 
         {
-            if (!canAccessRepo($project['source_type'], $project['source_url']))
+            try 
             {
-                outputProgress('project_skip', "Cannot access repository for {$project['name']}");
-                continue;
+                if (tryProcessNextCommitForProject($project, $config['stale_timeout']))
+                    $workFound = true;
             }
-            if (!projectNeedsUpdate($project['source_type'], $project['source_url'], $project['last_commit']))
+            catch (Exception $e) 
             {
-                outputProgress('project_skip', "No updates needed for {$project['name']}");
-                continue;
+                error_log("Error processing {$project['name']}: {$e->getMessage()}");
+                outputProgress('error', "Error: {$e->getMessage()}");
             }
-                    
-            $newCommits = fetchCommits($project['source_type'], $project['source_url'], $project['last_commit']);
-                    
-            if ($newCommits === false)
-            {
-                outputProgress('error', "Failed to download commits for {$project['name']}");
-                error_log("Failed to download commits for {$project['name']}");
-                continue;
-            }
-            $commitCount = count($newCommits);
-            outputProgress('commits_found', "Found {$commitCount} new commits for {$project['name']}", ['count' => $commitCount]);
-            $processedCount = 0;
-            foreach ($newCommits as $commit)
-            {
-                $processedCount++;
-                outputProgress('commit_start', "Processing commit {$processedCount}/{$commitCount}: {$commit['commit']}", [
-                    'current' => $processedCount,
-                    'total' => $commitCount,
-                    'commit' => $commit['commit']
-                ]);
-                $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'cp_' . md5($project['source_url'] . microtime());
-                mkdir($tempDir);
-                
-                try
-                {
-                    $chk = fetchCommitCode($commit, $project['source_type'], $project['source_url'], $project['last_commit'], $tempDir);
-                    if ($chk === false)
-                    {
-                        error_log("Failed to process commit for {$project['name']}");
-                        outputProgress('error', "Failed to checkout commit {$commit['commit']}");
-                        continue;
-                    }
-                    $excludedDirs = [];
-                    if (!empty($project['excluded_dirs']))
-                    {
-                        $excludedDirs = is_array($project['excluded_dirs'])
-                        ? $project['excluded_dirs']
-                        : explode(',', $project['excluded_dirs']);
-                    }
-                    $rpt = processProject($tempDir, $excludedDirs);
-                    if ($rpt === false)
-                    {
-                        error_log("Failed to process files for {$project['name']}");
-                        outputProgress('error', "Failed to process files for commit {$commit['commit']}");
-                        continue;
-                    }
-                    $commitId = updateCommitStatistics($project['id'], $commit);
-                    updateStatistics($project['id'], $commitId, $rpt);
-                    updateProjectLastCommit($project['id'], $commit['commit']);
-                    
-                    outputProgress('commit_complete', "Completed commit {$processedCount}/{$commitCount}", [
-                        'current' => $processedCount,
-                        'total' => $commitCount,
-                        'languages' => array_keys($rpt)
-                    ]);
-                }
-                finally
-                {
-                    rrmdir($tempDir);
-                }
-            }
-            outputProgress('project_complete', "Completed project: {$project['name']}", [
-                'commits_processed' => $commitCount
-            ]);
-        } 
-        catch (Exception $e) 
-        {
-            error_log("Error processing {$project['name']}: {$e->getMessage()}");
-            outputProgress('error', "Error processing {$project['name']}: {$e->getMessage()}");
         }
+        if (!$workFound)
+            outputProgress('all_complete', "No more work available. Processed {$loopCount} loops.");
     }
-    
 } 
 catch (PDOException $e) 
 {

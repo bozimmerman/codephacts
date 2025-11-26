@@ -1,36 +1,47 @@
 <?php
+/*
+ Copyright 2025-2025 Bo Zimmerman
+ 
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+ 
+ http://www.apache.org/licenses/LICENSE-2.0
+ 
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+ */
 $config = require __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'config.php';
 
 $results = null;
 $error = null;
 
-try {
+try
+{
     $pdo = new PDO(
         "mysql:host={$config['db']['host']};dbname={$config['db']['name']};charset={$config['db']['charset']}",
         $config['db']['user'],
         $config['db']['pass']
     );
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    // Get all projects for selection
     $stmt = $pdo->query("SELECT id, name FROM {$config['tables']['projects']} ORDER BY name ASC");
     $projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Get all languages
     $stmt = $pdo->query("SELECT DISTINCT language FROM {$config['tables']['statistics']} ORDER BY language ASC");
     $languages = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Process query if submitted
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') 
+    {
         $selectedProjects = isset($_POST['projects']) ? $_POST['projects'] : [];
         $selectedLanguages = isset($_POST['languages']) ? $_POST['languages'] : [];
         $dateFrom = isset($_POST['date_from']) ? $_POST['date_from'] : null;
         $dateTo = isset($_POST['date_to']) ? $_POST['date_to'] : null;
         
-        if (empty($selectedProjects)) {
+        if (empty($selectedProjects))
             $error = "Please select at least one project";
-        } else {
-            // Build query
+        else 
+        {
             $sql = "
                 SELECT 
                     p.name as project_name,
@@ -43,33 +54,31 @@ try {
                 JOIN {$config['tables']['projects']} p ON c.project_id = p.id
                 WHERE p.id IN (" . implode(',', array_fill(0, count($selectedProjects), '?')) . ")
             ";
-            
             $params = $selectedProjects;
-            
-            if (!empty($selectedLanguages)) {
+            if (!empty($selectedLanguages)) 
+            {
                 $sql .= " AND s.language IN (" . implode(',', array_fill(0, count($selectedLanguages), '?')) . ")";
                 $params = array_merge($params, $selectedLanguages);
             }
-            
-            if ($dateFrom) {
+            if ($dateFrom) 
+            {
                 $sql .= " AND c.commit_timestamp >= ?";
                 $params[] = $dateFrom . ' 00:00:00';
             }
-            
-            if ($dateTo) {
+            if ($dateTo) 
+            {
                 $sql .= " AND c.commit_timestamp <= ?";
                 $params[] = $dateTo . ' 23:59:59';
             }
-            
             $sql .= " GROUP BY p.id, p.name, s.language ORDER BY p.name, s.language";
-            
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
             $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
     }
-    
-} catch (PDOException $e) {
+} 
+catch (PDOException $e) 
+{
     $error = "Database error: " . $e->getMessage();
 }
 ?>

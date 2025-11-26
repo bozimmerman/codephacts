@@ -28,6 +28,7 @@ return [
         'pass'     => 'secretpassword',   // DB password
         'charset'  => 'utf8',          // Recommended charset
     ],
+    'stale_timeout' => 10000,
     'tables' => [
         'projects'      => 'projects',
         'statistics' => 'statistics',

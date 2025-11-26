@@ -1,15 +1,29 @@
 <?php
+/*
+ Copyright 2025-2025 Bo Zimmerman
+ 
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+ 
+ http://www.apache.org/licenses/LICENSE-2.0
+ 
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+ */
 $config = require __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'config.php';
 
-try {
+try 
+{
     $pdo = new PDO(
         "mysql:host={$config['db']['host']};dbname={$config['db']['name']};charset={$config['db']['charset']}",
         $config['db']['user'],
         $config['db']['pass']
     );
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    // Get all projects with their latest stats
     $stmt = $pdo->query("
         SELECT 
             p.id,
@@ -23,8 +37,6 @@ try {
         ORDER BY p.name ASC
     ");
     $projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Get total stats across all projects
     $stmt = $pdo->query("
         SELECT 
             SUM(s.code_lines) as total_code_lines,
@@ -38,8 +50,9 @@ try {
         ) latest ON s.project_id = latest.project_id AND s.commit_id = latest.max_commit_id
     ");
     $totals = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-} catch (PDOException $e) {
+} 
+catch (PDOException $e) 
+{
     die("Database error: " . $e->getMessage());
 }
 ?>

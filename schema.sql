@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS commits (
 CREATE TABLE IF NOT EXISTS statistics (
     id INT AUTO_INCREMENT PRIMARY KEY,
     project_id INT NOT NULL,
-    commit_id INT NOT NULL COMMENT 'Links to project_commits table',
+    commit_id INT NOT NULL COMMENT 'Links to commits table',
     language VARCHAR(50) NOT NULL,
     total_lines INT DEFAULT 0,
     code_lines INT DEFAULT 0,
