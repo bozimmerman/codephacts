@@ -389,14 +389,17 @@ function rrmdir($dir)
 }
 
 $rules = [];
-foreach (glob(__DIR__ . DIRECTORY_SEPARATOR . 'rules' . DIRECTORY_SEPARATOR  . '*.php') as $ruleFile) 
+$ruleFiles = glob(__DIR__ . DIRECTORY_SEPARATOR . 'rules' . DIRECTORY_SEPARATOR . '*.php');
+if ($ruleFiles === false)
+    $ruleFiles = [];
+foreach ($ruleFiles as $ruleFile)
 {
-    $rule = require $ruleFile; // require returns the value from the file
+    $basename = basename($ruleFile);
+    if (strpos($basename, 'c_style_') === 0 || strpos($basename, '_') === 0)
+        continue;
+    $rule = require $ruleFile;
     foreach ($rule['extensions'] as $ext) 
     {
-        $basename = basename($ruleFile);
-        if (strpos($basename, 'c_style_') === 0 || strpos($basename, '_') === 0)
-            continue;
         $rules[$ext] = [
             'language' => $rule['language'],
             'analyzer' => $rule['analyzer']
