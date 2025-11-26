@@ -57,14 +57,8 @@ try {
                 $stmt->execute([$name, $source_type, $source_url, $excluded_dirs]);
                 $message = "Project added successfully";
             }
-            
-            // Reload project data
-            if (!$project['id']) {
-                $project['id'] = $pdo->lastInsertId();
-            }
-            $stmt = $pdo->prepare("SELECT * FROM {$config['tables']['projects']} WHERE id = ?");
-            $stmt->execute([$project['id']]);
-            $project = $stmt->fetch(PDO::FETCH_ASSOC);
+            header('Location: projects.php');
+            exit;
         }
     }
     
@@ -118,8 +112,8 @@ try {
                 <input type="url" name="source_url" value="<?= htmlspecialchars($project['source_url']) ?>" required placeholder="https://github.com/user/repo.git">
                 
                 <label>Excluded Directories</label>
-                <input type="text" name="excluded_dirs" value="<?= htmlspecialchars($project['excluded_dirs']) ?>" placeholder="vendor,node_modules,build">
-                <small style="color: #6c757d;">Comma-separated list of directories to exclude (e.g., vendor,node_modules,build)</small>
+                <input type="text" name="excluded_dirs" value="<?= htmlspecialchars($project['excluded_dirs']) ?>" placeholder="/vendor,/extra/pages">
+                <small style="color: #6c757d;">Comma-separated dir paths exclude (e.g., /vendor,/extra/pages)</small>
                 
                 <div style="margin-top: 20px;">
                     <button type="submit"><?= $project['id'] ? 'Update' : 'Add' ?> Project</button>
