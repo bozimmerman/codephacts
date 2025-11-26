@@ -84,7 +84,7 @@ catch (PDOException $e)
                     <p>Projects</p>
                 </div>
                 <div style="text-align: center; padding: 20px; background: #e7f3ff; border-radius: 8px;">
-                    <h3 style="font-size: 2.5em; margin: 0; color: #007bff;"><?= number_format($totals['total_code_lines']) ?></h3>
+                    <h3 style="font-size: 2.5em; margin: 0; color: #007bff;"><?= number_format($totals['total_code_lines'] ?? 0) ?></h3>
                     <p>Lines of Code</p>
                 </div>
                 <div style="text-align: center; padding: 20px; background: #e7f3ff; border-radius: 8px;">

@@ -65,7 +65,6 @@ catch (PDOException $e)
                 <a href="index.php">Projects</a>
                 <a href="query.php">Query Data</a>
                 <a href="languages.php">Languages</a>
-                <a href="../admin/login.php">Admin</a>
             </nav>
         </div>
     </header>
@@ -94,9 +93,9 @@ catch (PDOException $e)
                             <tr>
                                 <td><strong><?= htmlspecialchars($lang['language']) ?></strong></td>
                                 <td><?= $lang['project_count'] ?></td>
-                                <td><?= number_format($lang['total_code_lines']) ?></td>
-                                <td><?= number_format($lang['total_comment_lines']) ?></td>
-                                <td><?= number_format($lang['total_blank_lines']) ?></td>
+                                <td><?= number_format($lang['total_code_lines'] ?? 0) ?></td>
+                                <td><?= number_format($lang['total_comment_lines'] ?? 0) ?></td>
+                                <td><?= number_format($lang['total_blank_lines'] ?? 0) ?></td>
                                 <td><?= number_format($lang['total_code_lines'] + $lang['total_comment_lines'] + $lang['total_blank_lines']) ?></td>
                             </tr>
                         <?php endforeach; ?>
@@ -149,5 +148,8 @@ catch (PDOException $e)
     });
     <?php endif; ?>
     </script>
+    <footer style="text-align: center; padding: 20px; margin-top: 40px; font-size: 0.8em; color: #999;">
+        <a href="../admin/login.php" style="color: #999; text-decoration: none;">admin</a>
+    </footer>
 </body>
 </html>

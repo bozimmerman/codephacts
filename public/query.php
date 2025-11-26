@@ -97,7 +97,6 @@ catch (PDOException $e)
                 <a href="index.php">Projects</a>
                 <a href="query.php">Query Data</a>
                 <a href="languages.php">Languages</a>
-                <a href="../admin/login.php">Admin</a>
             </nav>
         </div>
     </header>
@@ -158,15 +157,15 @@ catch (PDOException $e)
                     
                     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 20px;">
                         <div style="text-align: center; padding: 20px; background: #e7f3ff; border-radius: 8px;">
-                            <h3 style="font-size: 2em; margin: 0; color: #007bff;"><?= number_format($totalCode) ?></h3>
+                            <h3 style="font-size: 2em; margin: 0; color: #007bff;"><?= number_format($totalCode ?? 0) ?></h3>
                             <p>Lines of Code</p>
                         </div>
                         <div style="text-align: center; padding: 20px; background: #e7f3ff; border-radius: 8px;">
-                            <h3 style="font-size: 2em; margin: 0; color: #007bff;"><?= number_format($totalComments) ?></h3>
+                            <h3 style="font-size: 2em; margin: 0; color: #007bff;"><?= number_format($totalComments ?? 0) ?></h3>
                             <p>Comment Lines</p>
                         </div>
                         <div style="text-align: center; padding: 20px; background: #e7f3ff; border-radius: 8px;">
-                            <h3 style="font-size: 2em; margin: 0; color: #007bff;"><?= number_format($totalCommits) ?></h3>
+                            <h3 style="font-size: 2em; margin: 0; color: #007bff;"><?= number_format($totalCommits ?? 0) ?></h3>
                             <p>Commits</p>
                         </div>
                     </div>
@@ -186,9 +185,9 @@ catch (PDOException $e)
                                 <tr>
                                     <td><?= htmlspecialchars($row['project_name']) ?></td>
                                     <td><strong><?= htmlspecialchars($row['language']) ?></strong></td>
-                                    <td><?= number_format($row['total_code_lines']) ?></td>
-                                    <td><?= number_format($row['total_comment_lines']) ?></td>
-                                    <td><?= number_format($row['commit_count']) ?></td>
+                                    <td><?= number_format($row['total_code_lines'] ?? 0) ?></td>
+                                    <td><?= number_format($row['total_comment_lines'] ?? 0) ?></td>
+                                    <td><?= number_format($row['commit_count'] ?? 0) ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -198,4 +197,7 @@ catch (PDOException $e)
         <?php endif; ?>
     </div>
 </body>
+<footer style="text-align: center; padding: 20px; margin-top: 40px; font-size: 0.8em; color: #999;">
+    <a href="../admin/login.php" style="color: #999; text-decoration: none;">admin</a>
+</footer>
 </html>
