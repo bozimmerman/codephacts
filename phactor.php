@@ -147,7 +147,7 @@ function fetchCommitCode($commit, $sourceType, $sourceUrl, $lastCommit, $tempDir
     {
         $cloneCmd = "git clone --quiet " . escapeshellarg($sourceUrl) . " " . escapeshellarg($tempDir) . " 2>&1";
         $output = shell_exec($cloneCmd);
-        if (!is_dir($tempDir . '/.git'))
+        if (!is_dir($tempDir . DIRECTORY_SEPARATOR  . '.git'))
         {
             error_log("Failed to clone git repo to temp dir: $output");
             return false;
@@ -182,7 +182,7 @@ function processProject($tempDir, $excludedDirs)
     $report = [];
     $excludedDirs = array_map(function($dir)
     {
-        return '/' . trim($dir, '/');
+        return DIRECTORY_SEPARATOR . trim($dir, DIRECTORY_SEPARATOR);
     }, $excludedDirs);
 
     $files = new RecursiveIteratorIterator(
@@ -194,14 +194,15 @@ function processProject($tempDir, $excludedDirs)
         if (!$file->isFile())
             continue;
         $pathname = $file->getPathname();
-        if (strpos($pathname, '/.git/') !== false || strpos($pathname, '/.svn/') !== false)
+        if (strpos($pathname, DIRECTORY_SEPARATOR  . '.git' . DIRECTORY_SEPARATOR ) !== false 
+        || strpos($pathname, DIRECTORY_SEPARATOR  . '.svn' . DIRECTORY_SEPARATOR ) !== false)
             continue;
         $relativePath = str_replace($tempDir, '', $pathname);
         $shouldSkip = false;
         foreach ($excludedDirs as $excludedDir)
         {
             // Check if the relative path starts with the excluded directory
-            if (strpos($relativePath, $excludedDir . '/') === 0 ||
+            if (strpos($relativePath, $excludedDir . DIRECTORY_SEPARATOR) === 0 ||
                 strpos($relativePath, $excludedDir) === 0)
             {
                 $shouldSkip = true;
@@ -388,7 +389,8 @@ function rrmdir($dir)
 }
 
 $rules = [];
-foreach (glob(__DIR__ . '/rules/*.php') as $ruleFile) {
+foreach (glob(__DIR__ . DIRECTORY_SEPARATOR . 'rules' . DIRECTORY_SEPARATOR  . '*.php') as $ruleFile) 
+{
     $rule = require $ruleFile; // require returns the value from the file
     foreach ($rule['extensions'] as $ext) {
         $rules[$ext] = [
