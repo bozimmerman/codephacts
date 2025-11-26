@@ -17,8 +17,10 @@ if (!file_exists($phactorPath))
     exit;
 }
 
+/*
 $progressFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phactor_progress.json';
 file_put_contents($progressFile, json_encode([]));
+*/
 
 $command = "php -f " . escapeshellarg($phactorPath) . " 2>&1";
 $output = [];

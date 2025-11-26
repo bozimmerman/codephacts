@@ -139,8 +139,8 @@ $phactorPath = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'pha
         setTimeout(function() 
         {
             updateProgress(10, '1%');
-            updateStatus('Starting update...');
-            addOutput('=== CodePhacts Update Process ===');
+            //updateStatus('Updating all projects...');
+            updateStatus('=== CodePhacts Update Process ===');
             addOutput('Started at: ' + new Date().toLocaleString());
             addOutput('');
             addOutput('The dashboard will return when the progress completes.');
@@ -152,7 +152,7 @@ $phactorPath = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'pha
                     spinner.style.display = 'none';
                     completedActions.style.display = 'block';
                 }
-                header('Location: projects.php');
+                document.location.href='projects.php?'+new Date().toLocaleString();
                 //addOutput('Update process started');
             });
                         

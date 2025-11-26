@@ -28,6 +28,7 @@ function outputProgress($type, $message, $data = [])
         'timestamp' => date('Y-m-d H:i:s')
     ];
     echo json_encode($progress) . "\n";
+    /*
     $progressFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phactor_progress.json';
     $allProgress = [];
     if (file_exists($progressFile)) {
@@ -41,6 +42,7 @@ function outputProgress($type, $message, $data = [])
     }
     $allProgress[] = $progress;
     file_put_contents($progressFile, json_encode($allProgress));
+    */
 }
 
 function canAccessRepo($sourceType, $sourceUrl)
