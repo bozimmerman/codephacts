@@ -18,7 +18,8 @@
 return [
     'extensions' => ['html', 'htm', 'cmvp'],
     'language' => 'html',
-    'detector' => function($lines) {
+    'detector' => function($lines) 
+    {
         $detections = [];
         $htmlLines = [];
         $jsLines = [];

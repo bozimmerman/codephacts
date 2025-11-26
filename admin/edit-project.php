@@ -11,7 +11,8 @@ $project = [
     'excluded_dirs' => ''
 ];
 
-try {
+try
+{
     $pdo = new PDO(
         "mysql:host={$config['db']['host']};dbname={$config['db']['name']};charset={$config['db']['charset']}",
         $config['db']['user'],
@@ -19,28 +20,27 @@ try {
     );
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
-    // Load existing project if editing
-    if (isset($_GET['id'])) {
+    if (isset($_GET['id']))
+    {
         $stmt = $pdo->prepare("SELECT * FROM {$config['tables']['projects']} WHERE id = ?");
         $stmt->execute([$_GET['id']]);
         $loaded = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($loaded) {
+        if ($loaded)
             $project = $loaded;
-        }
     }
-    
-    // Handle form submission
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST')
+    {
         $name = trim($_POST['name']);
         $source_type = $_POST['source_type'];
         $source_url = trim($_POST['source_url']);
         $excluded_dirs = trim($_POST['excluded_dirs']);
         
-        if (empty($name) || empty($source_url)) {
+        if (empty($name) || empty($source_url))
             $error = "Name and URL are required";
-        } else {
-            if ($project['id']) {
-                // Update
+        else 
+        {
+            if ($project['id']) 
+            {
                 $stmt = $pdo->prepare("
                     UPDATE {$config['tables']['projects']} 
                     SET name = ?, source_type = ?, source_url = ?, excluded_dirs = ?
@@ -48,8 +48,9 @@ try {
                 ");
                 $stmt->execute([$name, $source_type, $source_url, $excluded_dirs, $project['id']]);
                 $message = "Project updated successfully";
-            } else {
-                // Insert
+            } 
+            else 
+            {
                 $stmt = $pdo->prepare("
                     INSERT INTO {$config['tables']['projects']} (name, source_type, source_url, excluded_dirs)
                     VALUES (?, ?, ?, ?)
@@ -62,7 +63,9 @@ try {
         }
     }
     
-} catch (PDOException $e) {
+} 
+catch (PDOException $e) 
+{
     $error = "Database error: " . $e->getMessage();
 }
 ?>

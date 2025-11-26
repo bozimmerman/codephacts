@@ -1,7 +1,8 @@
 <?php
 $config = require_once 'auth.php';
 
-try {
+try 
+{
     $pdo = new PDO(
         "mysql:host={$config['db']['host']};dbname={$config['db']['name']};charset={$config['db']['charset']}",
         $config['db']['user'],
@@ -40,7 +41,9 @@ try {
     ");
     $recentActivity = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-} catch (PDOException $e) {
+}
+catch (PDOException $e) 
+{
     die("Database error: " . $e->getMessage());
 }
 ?>

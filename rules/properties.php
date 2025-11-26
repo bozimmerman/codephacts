@@ -20,23 +20,21 @@ return [
     'language' => 'properties',
     'analyzer' => function(&$stats, $lines) 
     {
-        foreach ($lines as $line) {
+        foreach ($lines as $line)
+        {
             $trimmed = trim($line);
             
-            if (empty($trimmed)) {
+            if (empty($trimmed))
+            {
                 $stats['blank_lines']++;
                 continue;
             }
-            
-            // Properties files use # or ! for comments
-            if (strpos($trimmed, '#') === 0 || strpos($trimmed, '!') === 0) {
+            if (strpos($trimmed, '#') === 0 || strpos($trimmed, '!') === 0)
+            {
                 $stats['comment_lines']++;
                 continue;
             }
-            
             $stats['code_lines']++;
-            
-            // Each property line is one statement (key=value or key:value)
             $stats['code_statements'] += 1;
             $stats['weighted_code_lines'] += 1.0;
             $stats['weighted_code_statements'] += 1.0;

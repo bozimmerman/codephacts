@@ -4,26 +4,26 @@ $config = require_once 'auth.php';
 $message = null;
 $error = null;
 
-try {
+try
+{
     $pdo = new PDO(
         "mysql:host={$config['db']['host']};dbname={$config['db']['name']};charset={$config['db']['charset']}",
         $config['db']['user'],
         $config['db']['pass']
     );
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    // Handle delete
-    if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])) {
+    if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])) 
+    {
         $stmt = $pdo->prepare("DELETE FROM {$config['tables']['projects']} WHERE id = ?");
         $stmt->execute([$_GET['id']]);
         $message = "Project deleted successfully";
     }
-    
-    // Get all projects
     $stmt = $pdo->query("SELECT * FROM {$config['tables']['projects']} ORDER BY name ASC");
     $projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-} catch (PDOException $e) {
+}
+catch (PDOException $e)
+{
     $error = "Database error: " . $e->getMessage();
 }
 ?>

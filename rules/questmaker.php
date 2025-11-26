@@ -44,7 +44,8 @@ return [
             {
                 if ($state !== 'IN_NAME' || $line !== $nameBuffer)
                     $nameBuffer .= $line;
-                if (preg_match('/<\/NAME>/', $nameBuffer)) {
+                if (preg_match('/<\/NAME>/', $nameBuffer))
+                {
                     $matches = [];
                     if (preg_match('/<NAME>([^<]+)<\/NAME>/s', $nameBuffer, $matches)) 
                     {

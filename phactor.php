@@ -15,9 +15,33 @@
    limitations under the License.
 */
 /**
- * offline processing
+ * project processing
  */
 $config = require 'config.php';
+
+function outputProgress($type, $message, $data = []) 
+{
+    $progress = [
+        'type' => $type,
+        'message' => $message,
+        'data' => $data,
+        'timestamp' => date('Y-m-d H:i:s')
+    ];
+    echo json_encode($progress) . "\n";
+    $progressFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phactor_progress.json';
+    $allProgress = [];
+    if (file_exists($progressFile)) {
+        $content = file_get_contents($progressFile);
+        if ($content) {
+            $allProgress = json_decode($content, true);
+            if (!is_array($allProgress)) {
+                $allProgress = [];
+            }
+        }
+    }
+    $allProgress[] = $progress;
+    file_put_contents($progressFile, json_encode($allProgress));
+}
 
 function canAccessRepo($sourceType, $sourceUrl)
 {
@@ -336,28 +360,23 @@ function updateStatistics($projectId, $commitId, $report)
     }
 }
 
-function updateCommitStatistics($projectId, $newCommits)
+function updateCommitStatistics($projectId, $commit)
 {
     global $config, $pdo;
-    $commitsTable = isset($config['tables']['commits']) ? $config['tables']['commits'] : 'commits';
-    $commitIds = [];
+    $commitsTable = $config['tables']['commits'] ?? 'project_commits';
     
-    foreach ($newCommits as $commit)
-    {
-        $commitHash = $commit['commit'];
-        $timestamp = $commit['timestamp'];
-        $stmt = $pdo->prepare("
-            INSERT INTO `$commitsTable` (project_id, commit_hash, commit_timestamp, processed_at)
-            VALUES (?, ?, FROM_UNIXTIME(?), NOW())
-            ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), processed_at = NOW()
-        ");
-        
-        $stmt->execute([$projectId, $commitHash, $timestamp]);
-        $commitIds[$commitHash] = $pdo->lastInsertId();
-    }
+    $commitHash = $commit['commit'];
+    $timestamp = $commit['timestamp'];
+    $stmt = $pdo->prepare("
+        INSERT INTO `$commitsTable` (project_id, commit_hash, commit_timestamp, processed_at)
+        VALUES (?, ?, FROM_UNIXTIME(?), NOW())
+        ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), processed_at = NOW()
+    ");
     
-    return $commitIds;
+    $stmt->execute([$projectId, $commitHash, $timestamp]);
+    return $pdo->lastInsertId();
 }
+
 function updateProjectLastCommit($projectId, $latestCommit)
 {
     global $config, $pdo;
@@ -417,7 +436,8 @@ foreach ($ruleFiles as $ruleFile)
     }
 }
 
-try {
+try
+{
     $pdo = new PDO(
         "mysql:host={$config['db']['host']};dbname={$config['db']['name']};charset={$config['db']['charset']}",
         $config['db']['user'],
@@ -436,23 +456,39 @@ try {
     
     foreach ($projects as $project) 
     {
+        outputProgress('project_start', "Starting project: {$project['name']}", ['project_id' => $project['id']]);
         try 
         {
             if (!canAccessRepo($project['source_type'], $project['source_url']))
+            {
+                outputProgress('project_skip', "Cannot access repository for {$project['name']}");
                 continue;
+            }
             if (!projectNeedsUpdate($project['source_type'], $project['source_url'], $project['last_commit']))
+            {
+                outputProgress('project_skip', "No updates needed for {$project['name']}");
                 continue;
+            }
                     
             $newCommits = fetchCommits($project['source_type'], $project['source_url'], $project['last_commit']);
                     
             if ($newCommits === false)
             {
+                outputProgress('error', "Failed to download commits for {$project['name']}");
                 error_log("Failed to download commits for {$project['name']}");
                 continue;
             }
-            $commitIds = updateCommitStatistics($project['id'], $newCommits);
+            $commitCount = count($newCommits);
+            outputProgress('commits_found', "Found {$commitCount} new commits for {$project['name']}", ['count' => $commitCount]);
+            $processedCount = 0;
             foreach ($newCommits as $commit)
             {
+                $processedCount++;
+                outputProgress('commit_start', "Processing commit {$processedCount}/{$commitCount}: {$commit['commit']}", [
+                    'current' => $processedCount,
+                    'total' => $commitCount,
+                    'commit' => $commit['commit']
+                ]);
                 $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'cp_' . md5($project['source_url'] . microtime());
                 mkdir($tempDir);
                 
@@ -462,6 +498,7 @@ try {
                     if ($chk === false)
                     {
                         error_log("Failed to process commit for {$project['name']}");
+                        outputProgress('error', "Failed to checkout commit {$commit['commit']}");
                         continue;
                     }
                     $excludedDirs = [];
@@ -475,25 +512,32 @@ try {
                     if ($rpt === false)
                     {
                         error_log("Failed to process files for {$project['name']}");
+                        outputProgress('error', "Failed to process files for commit {$commit['commit']}");
                         continue;
                     }
-                    $commitId = $commitIds[$commit['commit']];
+                    $commitId = updateCommitStatistics($project['id'], $commit);
                     updateStatistics($project['id'], $commitId, $rpt);
+                    updateProjectLastCommit($project['id'], $commit['commit']);
+                    
+                    outputProgress('commit_complete', "Completed commit {$processedCount}/{$commitCount}", [
+                        'current' => $processedCount,
+                        'total' => $commitCount,
+                        'languages' => array_keys($rpt)
+                    ]);
                 }
                 finally
                 {
                     rrmdir($tempDir);
                 }
             }
-            updateCommitStatistics($project['id'], $newCommits);
-            $lastCommit = end($newCommits);
-            $latestCommit = isset($lastCommit['commit']) ? $lastCommit['commit'] : $lastCommit['revision'];
-            updateProjectLastCommit($project['id'], $latestCommit);
-                    
+            outputProgress('project_complete', "Completed project: {$project['name']}", [
+                'commits_processed' => $commitCount
+            ]);
         } 
         catch (Exception $e) 
         {
             error_log("Error processing {$project['name']}: {$e->getMessage()}");
+            outputProgress('error', "Error processing {$project['name']}: {$e->getMessage()}");
         }
     }
     
@@ -502,3 +546,4 @@ catch (PDOException $e)
 {
     die("Database error: " . $e->getMessage());
 }
+outputProgress('all_complete', "All projects processed.");

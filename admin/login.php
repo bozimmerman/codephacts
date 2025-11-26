@@ -4,8 +4,10 @@ session_start();
 $config = require __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'config.php';
 $error = null;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password'])) {
-    if ($_POST['password'] === $config['admin_password']) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password']))
+{
+    if ($_POST['password'] === $config['admin_password'])
+    {
         $_SESSION['admin_logged_in'] = true;
         header('Location: index.php');
         exit;
