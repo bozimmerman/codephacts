@@ -269,14 +269,6 @@ catch (PDOException $e)
         return { labels, changes };
     }
     const weeklyData = groupCommitsByWeek(commits);
-    console.log("Total commits:", commits.length);
-    console.log("First commit:", commits[0]);
-    console.log("Last commit:", commits[commits.length - 1]);
-    console.log("Weekly data labels:", weeklyData.labels);
-    console.log("Weekly data changes:", weeklyData.changes);
-    console.log("First 5 weeks:", weeklyData.labels.slice(0, 5));
-    console.log("Last 5 weeks:", weeklyData.labels.slice(-5));
-
     // Lines of Code Over Time Chart - showing weekly average changes
     const codeCtx = document.getElementById('codeHistoryChart');
     new Chart(codeCtx, {
