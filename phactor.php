@@ -296,7 +296,7 @@ function analyzeFile($ruleInfo, $lines)
     return $stats;
 }
 
-function updateStatistics($projectId, $report)
+function updateStatistics($projectId, $commitId, $report)
 {
     global $config, $pdo;
     
@@ -306,9 +306,9 @@ function updateStatistics($projectId, $report)
     {
         $stmt = $pdo->prepare("
             INSERT INTO `$statsTable`
-            (project_id, language, total_lines, code_lines, code_statements,
+            (project_id, commit_id, language, total_lines, code_lines, code_statements,
              weighted_code_statements, weighted_code_lines, blank_lines, comment_lines, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
             ON DUPLICATE KEY UPDATE
             total_lines = VALUES(total_lines),
             code_lines = VALUES(code_lines),
@@ -322,6 +322,7 @@ function updateStatistics($projectId, $report)
         
         $stmt->execute([
             $projectId,
+            $commitId,
             $lang,
             $stats['total_lines'],
             $stats['code_lines'],
@@ -338,6 +339,8 @@ function updateCommitStatistics($projectId, $newCommits)
 {
     global $config, $pdo;
     $commitsTable = $config['tables']['commits'] ?? 'project_commits';
+    $commitIds = [];
+    
     foreach ($newCommits as $commit)
     {
         $commitHash = $commit['commit'];
@@ -345,13 +348,15 @@ function updateCommitStatistics($projectId, $newCommits)
         $stmt = $pdo->prepare("
             INSERT INTO `$commitsTable` (project_id, commit_hash, commit_timestamp, processed_at)
             VALUES (?, ?, FROM_UNIXTIME(?), NOW())
-            ON DUPLICATE KEY UPDATE processed_at = NOW()
+            ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), processed_at = NOW()
         ");
         
         $stmt->execute([$projectId, $commitHash, $timestamp]);
+        $commitIds[$commitHash] = $pdo->lastInsertId();
     }
+    
+    return $commitIds;
 }
-
 function updateProjectLastCommit($projectId, $latestCommit)
 {
     global $config, $pdo;
@@ -426,7 +431,7 @@ try {
                 error_log("Failed to download commits for {$project['name']}");
                 continue;
             }
-                    
+            $commitIds = updateCommitStatistics($project['id'], $newCommits);
             foreach ($newCommits as $commit)
             {
                 $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'cp_' . md5($project['source_url'] . microtime());
@@ -453,8 +458,8 @@ try {
                         error_log("Failed to process files for {$project['name']}");
                         continue;
                     }
-                    
-                    updateStatistics($project['id'], $rpt);
+                    $commitId = $commitIds[$commit['commit']];
+                    updateStatistics($project['id'], $commitId, $rpt);
                 }
                 finally
                 {
