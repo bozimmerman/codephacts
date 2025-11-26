@@ -15,13 +15,16 @@
  limitations under the License.
  */
 
-function analyzeCStyleStatements($line) 
+if (!function_exists('analyzeCStyleStatements'))
 {
-    $cleaned = preg_replace('/"(?:[^"\\\\]|\\\\.)*"/', '""', $line);
-    $cleaned = preg_replace("/'(?:[^'\\\\]|\\\\.)*'/", "''", $cleaned);
-    $cleaned = preg_replace('/\bfor\s*\([^)]*\)/', 'for()', $cleaned);
-    $statements = substr_count($cleaned, ';');
-    if (preg_match('/\b(if|else|while|do|for|switch|function|class)\b/', $line))
-        $statements = max(1, $statements);
-    return $statements;
+    function analyzeCStyleStatements($line) 
+    {
+        $cleaned = preg_replace('/"(?:[^"\\\\]|\\\\.)*"/', '""', $line);
+        $cleaned = preg_replace("/'(?:[^'\\\\]|\\\\.)*'/", "''", $cleaned);
+        $cleaned = preg_replace('/\bfor\s*\([^)]*\)/', 'for()', $cleaned);
+        $statements = substr_count($cleaned, ';');
+        if (preg_match('/\b(if|else|while|do|for|switch|function|class)\b/', $line))
+            $statements = max(1, $statements);
+        return $statements;
+    }
 }

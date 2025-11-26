@@ -15,34 +15,37 @@
  limitations under the License.
  */
 
-require_once __DIR__ . '/c_style_comments.php';
-require_once __DIR__ . '/c_style_statements.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'c_style_comments.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'c_style_statements.php';
 
-function analyzeCStyleLines(&$stats, $lines)
+if (!function_exists('analyzeCStyleLines')) 
 {
-    $commentState = ['inBlockComment' => false];
-    foreach ($lines as $line) 
+    function analyzeCStyleLines(&$stats, $lines)
     {
-        $trimmed = trim($line);
-        if (empty($trimmed)) 
+        $commentState = ['inBlockComment' => false];
+        foreach ($lines as $line) 
         {
-            $stats['blank_lines']++;
-            continue;
+            $trimmed = trim($line);
+            if (empty($trimmed)) 
+            {
+                $stats['blank_lines']++;
+                continue;
+            }
+            $commentInfo = analyzeCStyleComment($line, $commentState);
+            if ($commentInfo['has_comment'])
+            {
+                $stats['comment_lines']++;
+                continue;
+            }
+            $stats['code_lines']++;
+            
+            $statements = analyzeCStyleStatements($line);
+            $stats['code_statements'] += max(1, $statements);
+            
+            $stats['weighted_code_lines'] += 1.0;
+            $stats['weighted_code_statements'] += max(1, $statements);
         }
-        $commentInfo = analyzeCStyleComment($line, $commentState);
-        if ($commentInfo['has_comment'])
-        {
-            $stats['comment_lines']++;
-            continue;
-        }
-        $stats['code_lines']++;
         
-        $statements = analyzeCStyleStatements($line);
-        $stats['code_statements'] += max(1, $statements);
-        
-        $stats['weighted_code_lines'] += 1.0;
-        $stats['weighted_code_statements'] += max(1, $statements);
+        return $stats;
     }
-    
-    return $stats;
 }

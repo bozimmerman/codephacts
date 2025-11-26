@@ -212,7 +212,7 @@ function processProject($tempDir, $excludedDirs)
         if ($shouldSkip)
             continue;
         $ext = strtolower($file->getExtension());
-        $lang = $rules[$ext] ?? null;
+        $lang = isset($rules[$ext]) ? $rules[$ext] : null;
         if (!$lang)
             continue;
         processFile($file->getPathname(), $ext, $report);
@@ -237,7 +237,7 @@ function processFile($filePath, $ext, &$report)
         $candidate = array_pop($candidates);
         $rule = $candidate['rule'];
         $lines = $candidate['lines'];
-        $detector = $rule['detector'] ?? null;
+        $detector = isset($rule['detector']) ? $rule['detector'] : null;
         if ($detector)
         {
             $detections = $detector($lines); // might alter lines if it wants to?
@@ -301,7 +301,7 @@ function updateStatistics($projectId, $commitId, $report)
 {
     global $config, $pdo;
     
-    $statsTable = $config['tables']['statistics'] ?? 'project_statistics';
+    $statsTable = isset($config['tables']['statistics']) ? $config['tables']['statistics'] : 'statistics';
     
     foreach ($report as $lang => $stats)
     {
@@ -339,7 +339,7 @@ function updateStatistics($projectId, $commitId, $report)
 function updateCommitStatistics($projectId, $newCommits)
 {
     global $config, $pdo;
-    $commitsTable = $config['tables']['commits'] ?? 'project_commits';
+    $commitsTable = isset($config['tables']['commits']) ? $config['tables']['commits'] : 'commits';
     $commitIds = [];
     
     foreach ($newCommits as $commit)
@@ -469,7 +469,8 @@ try {
                 }
             }
             updateCommitStatistics($project['id'], $newCommits);
-            $latestCommit = end($newCommits)['commit'] ?? end($newCommits)['revision'];
+            $lastCommit = end($newCommits);
+            $latestCommit = isset($lastCommit['commit']) ? $lastCommit['commit'] : $lastCommit['revision'];
             updateProjectLastCommit($project['id'], $latestCommit);
                     
         } 

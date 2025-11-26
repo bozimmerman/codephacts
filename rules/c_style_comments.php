@@ -14,46 +14,49 @@
  See the License for the specific language governing permissions and
  limitations under the License.
  */
-function analyzeCStyleComment($line, &$state) 
- {
-     $len = strlen($line);
-     $hasCode = false;
-     $hasComment = false;
-     $i = 0;
-     while ($i < $len) 
+if (!function_exists('analyzeCStyleComment'))
+{
+    function analyzeCStyleComment($line, &$state) 
      {
-         // If we're in a block comment, look for end
-         if ($state['inBlockComment']) 
+         $len = strlen($line);
+         $hasCode = false;
+         $hasComment = false;
+         $i = 0;
+         while ($i < $len) 
          {
-             $hasComment = true;
-             if ($i < $len - 1 && $line[$i] === '*' && $line[$i + 1] === '/') 
+             // If we're in a block comment, look for end
+             if ($state['inBlockComment']) 
              {
-                 $state['inBlockComment'] = false;
-                 $i ++;
+                 $hasComment = true;
+                 if ($i < $len - 1 && $line[$i] === '*' && $line[$i + 1] === '/') 
+                 {
+                     $state['inBlockComment'] = false;
+                     $i ++;
+                 }
+                 $i++;
+                 continue;
              }
+             if ($i < $len - 1 && $line[$i] === '/' && $line[$i + 1] === '*') 
+             {
+                 $hasComment = true;
+                 $state['inBlockComment'] = true;
+                 $i += 2;
+                 continue;
+             }
+             if ($i < $len - 1 && $line[$i] === '/' && $line[$i + 1] === '/') 
+             {
+                 $hasComment = true;
+                 break; // Rest of line is comment
+             }
+             if (!ctype_space($line[$i])) 
+                 $hasCode = true;
              $i++;
-             continue;
          }
-         if ($i < $len - 1 && $line[$i] === '/' && $line[$i + 1] === '*') 
-         {
-             $hasComment = true;
-             $state['inBlockComment'] = true;
-             $i += 2;
-             continue;
-         }
-         if ($i < $len - 1 && $line[$i] === '/' && $line[$i + 1] === '/') 
-         {
-             $hasComment = true;
-             break; // Rest of line is comment
-         }
-         if (!ctype_space($line[$i])) 
-             $hasCode = true;
-         $i++;
+         
+         return [
+             'has_comment' => $hasComment,
+             'is_comment' => $hasComment && !$hasCode,
+             'has_code' => $hasCode
+         ];
      }
-     
-     return [
-         'has_comment' => $hasComment,
-         'is_comment' => $hasComment && !$hasCode,
-         'has_code' => $hasCode
-     ];
- }
+}
