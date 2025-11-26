@@ -392,7 +392,11 @@ $rules = [];
 foreach (glob(__DIR__ . DIRECTORY_SEPARATOR . 'rules' . DIRECTORY_SEPARATOR  . '*.php') as $ruleFile) 
 {
     $rule = require $ruleFile; // require returns the value from the file
-    foreach ($rule['extensions'] as $ext) {
+    foreach ($rule['extensions'] as $ext) 
+    {
+        $basename = basename($ruleFile);
+        if (strpos($basename, 'c_style_') === 0 || strpos($basename, '_') === 0)
+            continue;
         $rules[$ext] = [
             'language' => $rule['language'],
             'analyzer' => $rule['analyzer']

@@ -14,7 +14,7 @@
  See the License for the specific language governing permissions and
  limitations under the License.
  */
-require_once __DIR__ . DIRECTORY_SEPARATOR . 'c_style_analyzer.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . '_c_style_analyzer.php';
 return [
     'extensions' => ['cs'],
     'language' => 'csharp',

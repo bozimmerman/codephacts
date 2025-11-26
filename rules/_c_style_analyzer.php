@@ -15,8 +15,8 @@
  limitations under the License.
  */
 
-require_once __DIR__ . DIRECTORY_SEPARATOR . 'c_style_comments.php';
-require_once __DIR__ . DIRECTORY_SEPARATOR . 'c_style_statements.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . '_c_style_comments.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . '_c_style_statements.php';
 
 if (!function_exists('analyzeCStyleLines')) 
 {
