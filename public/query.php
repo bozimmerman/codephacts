@@ -108,8 +108,6 @@ catch (PDOException $e)
     <div class="container">
         <div class="card">
             <h2>Query Code Statistics</h2>
-            <p>Ask questions like: "How much Java have I written across these 3 projects in the last year?"</p>
-            
             <?php if ($error): ?>
                 <div class="error"><?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
