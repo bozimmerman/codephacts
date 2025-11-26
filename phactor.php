@@ -73,8 +73,11 @@ function canAccessRepo($sourceType, $sourceUrl)
         throw new InvalidArgumentException("Unsupported source type: $sourceType");
 }
 
-function fetchCommits($sourceType, $sourceUrl, $lastCommit)
+function fetchCommits($sourceType, $sourceUrl, $lastCommit, &$cache = [])
 {
+    $cacheKey = $sourceUrl;
+    if (isset($cache[$cacheKey]) && !empty($cache[$cacheKey]))
+        return $cache[$cacheKey];
     $commits = [];
     
     if ($sourceType === 'git')
@@ -108,7 +111,9 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit)
                 $commits[] = ['commit' => trim($hash), 'timestamp' => (int)$timestamp];
             }
             
-            return array_reverse($commits);
+            $result = array_reverse($commits);
+            $cache[$cacheKey] = $result;
+            return $result;
         }
         finally
         {
@@ -118,9 +123,15 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit)
     elseif ($sourceType === 'svn')
     {
         $startRev = $lastCommit ? ((int)$lastCommit + 1) : 1;
-        $cmd = "svn log " . escapeshellarg($sourceUrl) . " -r {$startRev}:HEAD --xml --quiet 2>&1";
+        $cmd = "svn log " . escapeshellarg($sourceUrl) . " -r {$startRev}:HEAD --limit 100 --xml --quiet 2>&1";
+/*TODO: DELME*/ error_log("Fetching $cmd");
         $output = shell_exec($cmd);
-        if (!$output || stripos($output, 'E') === 0)
+        if (stripos($output, 'E160006') !== false || stripos($output, 'No such revision') !== false)
+        {
+            $cmd = "svn log " . escapeshellarg($sourceUrl) . " --limit 100 --xml --quiet 2>&1";
+            $output = shell_exec($cmd);
+        }
+        if (!$output || (stripos($output, 'E') === 0 && stripos($output, 'E160006') === false))
         {
             error_log("Failed to fetch SVN log: $output");
             return false;
@@ -129,21 +140,29 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit)
         if ($xml === false)
         {
             error_log("Failed to parse SVN XML output");
+            error_log("SVN XML output: " . substr($output, 0, 500));
             return false;
         }
+        
+        $allRevisions = [];
         foreach ($xml->logentry as $entry)
         {
             $revision = (string)$entry['revision'];
             $timestamp = strtotime((string)$entry->date);
-            $commits[] = ['commit' => $revision, 'timestamp' => $timestamp];
+            if ($lastCommit && (int)$revision <= (int)$lastCommit)
+                continue;
+            $allRevisions[] = ['commit' => $revision, 'timestamp' => $timestamp];
         }
-        return $commits;
+        usort($allRevisions, function($a, $b) {
+            return (int)$a['commit'] - (int)$b['commit'];
+        });
+        $cache[$cacheKey] = $allRevisions;
+        return $allRevisions;
     }
-    
     return false;
 }
 
-function getNextUnprocessedCommit($projectId, $sourceType, $sourceUrl, $includeCommitsOlderThan) 
+function getNextUnprocessedCommit($projectId, $sourceType, $sourceUrl, $includeCommitsOlderThan, &$cache = []) 
 {
     global $pdo, $config;
     
@@ -159,7 +178,7 @@ function getNextUnprocessedCommit($projectId, $sourceType, $sourceUrl, $includeC
     ");
     $stmt->execute([$projectId]);
     $lastCompleted = $stmt->fetchColumn();
-    $newCommits = fetchCommits($sourceType, $sourceUrl, $lastCompleted);
+    $newCommits = fetchCommits($sourceType, $sourceUrl, $lastCompleted, $cache);
     if ($newCommits === false || empty($newCommits))
         return null;
     $stmt = $pdo->prepare("
@@ -184,12 +203,24 @@ function getNextUnprocessedCommit($projectId, $sourceType, $sourceUrl, $includeC
     {
         $commitHash = $commit['commit'];
         if (!isset($tracked[$commitHash]))
+        {
+            $cacheKey = $sourceUrl;
+            if (isset($cache[$cacheKey]))
+                array_shift($cache[$cacheKey]);
             return $commit;
+        }
         $info = $tracked[$commitHash];
-        if (!$info['has_stats'] 
-        && $info['processed_at'] 
-        && $info['processed_at'] < $staleThreshold)
+        if (!$info['has_stats'])
             return $commit;
+
+        if ($info['processed_at'] 
+        && $info['processed_at'] < $staleThreshold)
+        {
+            $cacheKey = $sourceUrl;
+            if (isset($cache[$cacheKey]))
+                array_shift($cache[$cacheKey]);
+            return $commit;
+        }
     }
     return null;
 }
@@ -264,8 +295,7 @@ function processProject($tempDir, $excludedDirs)
         if ($shouldSkip)
             continue;
         $ext = strtolower($file->getExtension());
-        $lang = isset($rules[$ext]) ? $rules[$ext] : null;
-        if (!$lang)
+        if (!isset($rules[$ext]))
             continue;
         processFile($file->getPathname(), $ext, $report);
     }
@@ -523,14 +553,14 @@ function processCommitForProject($project, $commit, $commitId)
     }
 }
 
-function tryProcessNextCommitForProject($project, $stale_timeout)
+function tryProcessNextCommitForProject($project, $stale_timeout, &$cache = [])
 {
     if (!canAccessRepo($project['source_type'], $project['source_url']))
     {
         outputProgress('project_skip', "Cannot access repository for {$project['name']}");
         return false;
     }
-    $commit = getNextUnprocessedCommit($project['id'], $project['source_type'], $project['source_url'], $stale_timeout );
+    $commit = getNextUnprocessedCommit($project['id'], $project['source_type'], $project['source_url'], $stale_timeout, $cache );
     if (!$commit)
         return false; // No work for this project
     $commitId = tryClaimCommit($project['id'], $commit);
@@ -552,8 +582,10 @@ try
     );
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $projectsTable = $config['tables']['projects'];
+    $completedProjects = [];
     $workFound = true;
     $loopCount = 0;
+    $cache = [];
     while ($workFound) 
     {
         $loopCount++;
@@ -568,10 +600,14 @@ try
         $projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($projects as $project) 
         {
-            try 
+            if (in_array($project['id'], $completedProjects))
+                continue;
+            try
             {
-                if (tryProcessNextCommitForProject($project, $config['stale_timeout']))
+                if (tryProcessNextCommitForProject($project, $config['stale_timeout'], $cache))
                     $workFound = true;
+                else
+                    $completedProjects[] = $project['id'];
             }
             catch (Exception $e) 
             {
