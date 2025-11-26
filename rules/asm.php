@@ -44,6 +44,7 @@ return [
                 continue;
             }
             $stats['code_lines']++;
+            $stats['ncloc']++;
             $codePart = $line;
             $commentPos = false;
             $semiPos = strpos($line, ';');

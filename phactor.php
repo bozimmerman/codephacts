@@ -327,7 +327,8 @@ function processFile($filePath, $ext, &$report)
                 'weighted_code_statements' => 0,
                 'weighted_code_lines' => 0,
                 'blank_lines' => 0,
-                'comment_lines' => 0
+                'comment_lines' => 0,
+                'ncloc' => 0,
             ];
         foreach ($stats as $key => $value)
             $report[$lang][$key] += $value;
@@ -343,7 +344,8 @@ function analyzeFile($ruleInfo, $lines)
         'weighted_code_statements' => 0,
         'weighted_code_lines' => 0,
         'blank_lines' => 0,
-        'comment_lines' => 0
+        'comment_lines' => 0,
+        'ncloc' => 0
     ];
     $ruleInfo['analyzer']($stats, $lines);
     return $stats;
@@ -360,8 +362,8 @@ function updateStatistics($projectId, $commitId, $report)
         $stmt = $pdo->prepare("
             INSERT INTO `$statsTable`
             (project_id, commit_id, language, total_lines, code_lines, code_statements,
-             weighted_code_statements, weighted_code_lines, blank_lines, comment_lines, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+             weighted_code_statements, weighted_code_lines, blank_lines, comment_lines, updated_at, ncloc)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)
             ON DUPLICATE KEY UPDATE
             total_lines = VALUES(total_lines),
             code_lines = VALUES(code_lines),
@@ -370,7 +372,8 @@ function updateStatistics($projectId, $commitId, $report)
             weighted_code_lines = VALUES(weighted_code_lines),
             blank_lines = VALUES(blank_lines),
             comment_lines = VALUES(comment_lines),
-            updated_at = NOW()
+            updated_at = NOW(),
+            ncloc = VALUES(ncloc)
         ");
         
         $stmt->execute([
@@ -383,7 +386,8 @@ function updateStatistics($projectId, $commitId, $report)
             $stats['weighted_code_statements'],
             $stats['weighted_code_lines'],
             $stats['blank_lines'],
-            $stats['comment_lines']
+            $stats['comment_lines'],
+            $stats['ncloc']
         ]);
     }
 }

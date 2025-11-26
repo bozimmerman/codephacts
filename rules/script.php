@@ -39,6 +39,7 @@ return [
                 continue;
             }
             $stats['code_lines']++;
+            $stats['ncloc']++;
             if (strpos($line, '#') !== false) 
                 $stats['comment_lines']++;
             $statements = 1;

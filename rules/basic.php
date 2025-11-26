@@ -53,6 +53,7 @@ return [
                 continue;
             }
             $stats['code_lines']++;
+            $stats['ncloc']++;
             $codePart = $line;
             if (preg_match('/\bREM\b/i', $line)) 
             {

@@ -34,6 +34,7 @@ return [
                 continue;
             }
             $stats['code_lines']++;
+            $stats['ncloc']++;
             $codePart = $line;
             $hashPos = strpos($line, '#');
             if ($hashPos !== false) 

@@ -34,6 +34,7 @@ return [
                 continue;
             }
             $stats['code_lines']++;
+            $stats['ncloc']++;
             $statements = 1;
             $statements += substr_count($line, '&');
             $statements -= substr_count($line, '&&');

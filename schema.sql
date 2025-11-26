@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS statistics (
     blank_lines INT DEFAULT 0,
     comment_lines INT DEFAULT 0,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    ncloc INT DEFAULT 0,
     UNIQUE KEY unique_commit_language (commit_id, language),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (commit_id) REFERENCES commits(id) ON DELETE CASCADE,

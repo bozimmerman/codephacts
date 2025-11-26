@@ -34,6 +34,7 @@ return [
                 continue;
             }
             $stats['code_lines']++;
+            $stats['ncloc']++;
             $codePart = $line;
             $inString = false;
             for ($i = 0; $i < strlen($line); $i++) 

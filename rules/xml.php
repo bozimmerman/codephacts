@@ -45,7 +45,8 @@ return [
             }
             if (preg_match('/<[^>]+>/', $line)) 
             {
-                $stats['code_lines']++;
+                //$stats['code_lines']++;
+                $stats['ncloc']++;
                 $matches = [];
                 preg_match_all('/<(?!\/)([^>\/]+)(\/?)>/', $line, $matches);
                 $statements = count($matches[0]);

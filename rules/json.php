@@ -28,7 +28,8 @@ return [
                 $stats['blank_lines']++;
                 continue;
             }
-            $stats['code_lines']++;
+            //$stats['code_lines']++;
+            $stats['ncloc']++;
             $statements = 0;
             $statements += substr_count($trimmed, ',');
             $statements += substr_count($trimmed, '{');

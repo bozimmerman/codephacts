@@ -38,6 +38,7 @@ if (!function_exists('analyzeCStyleLines'))
                 continue;
             }
             $stats['code_lines']++;
+            $stats['ncloc']++;
             
             $statements = analyzeCStyleStatements($line);
             $stats['code_statements'] += max(1, $statements);
