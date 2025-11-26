@@ -74,11 +74,11 @@ try
             c.commit_timestamp,
             SUM(s.code_lines) as total_code_lines
         FROM {$config['tables']['commits']} c
-        LEFT JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+        INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
         WHERE c.project_id = ?
         GROUP BY c.id, c.commit_hash, c.commit_timestamp
         ORDER BY c.commit_timestamp ASC
-    ");
+        ");
         $stmt->execute([$projectId]);
         $allCommits = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
@@ -115,12 +115,16 @@ catch (PDOException $e)
 <body>
     <header>
         <div class="container">
-            <h1>CodePhacts</h1>
-            <nav>
-                <a href="index.php">Projects</a>
-                <a href="query.php">Query Data</a>
-                <a href="languages.php">Languages</a>
-            </nav>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <a href="index.php" style="text-decoration: none;">
+                    <img src="../images/codephacts.png" alt="CodePhacts" style="height: 100px; display: block; margin: -30px 0;">
+                </a>
+                <nav>
+                    <a href="index.php">Projects</a>
+                    <a href="query.php">Query Data</a>
+                    <a href="languages.php">Languages</a>
+                </nav>
+            </div>
         </div>
     </header>
 
@@ -227,6 +231,8 @@ catch (PDOException $e)
         const weeklyData = {};
         for (let i = 0; i < commits.length; i++) 
         {
+            if (!commits[i].total_code_lines || commits[i].total_code_lines === null)
+                continue;
             const date = new Date(commits[i].commit_timestamp);
             const weekStart = new Date(date);
             weekStart.setDate(date.getDate() - date.getDay());
@@ -263,6 +269,13 @@ catch (PDOException $e)
         return { labels, changes };
     }
     const weeklyData = groupCommitsByWeek(commits);
+    console.log("Total commits:", commits.length);
+    console.log("First commit:", commits[0]);
+    console.log("Last commit:", commits[commits.length - 1]);
+    console.log("Weekly data labels:", weeklyData.labels);
+    console.log("Weekly data changes:", weeklyData.changes);
+    console.log("First 5 weeks:", weeklyData.labels.slice(0, 5));
+    console.log("Last 5 weeks:", weeklyData.labels.slice(-5));
 
     // Lines of Code Over Time Chart - showing weekly average changes
     const codeCtx = document.getElementById('codeHistoryChart');

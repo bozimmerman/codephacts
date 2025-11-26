@@ -66,12 +66,16 @@ catch (PDOException $e)
 <body>
     <header>
         <div class="container">
-            <h1>CodePhacts</h1>
-            <nav>
-                <a href="index.php">Projects</a>
-                <a href="query.php">Query Data</a>
-                <a href="languages.php">Languages</a>
-            </nav>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <a href="index.php" style="text-decoration: none;">
+                    <img src="../images/codephacts.png" alt="CodePhacts" style="height: 100px; display: block; margin: -30px 0;">
+                </a>
+                <nav>
+                    <a href="index.php">Projects</a>
+                    <a href="query.php">Query Data</a>
+                    <a href="languages.php">Languages</a>
+                </nav>
+            </div>
         </div>
     </header>
     
