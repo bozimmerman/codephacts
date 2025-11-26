@@ -25,7 +25,7 @@ return [
         'name'     => 'codephacts',      // Database name
         'user'     => 'root',           // DB username
         'pass'     => 'secretpassword',   // DB password
-        'charset'  => 'utf8mb4',          // Recommended charset
+        'charset'  => 'utf8',          // Recommended charset
     ],
     'tables' => [
         'projects'      => 'projects',
