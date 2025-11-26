@@ -19,6 +19,7 @@
  */
 
 return [
+    'admin_password' => 'ForTheLoveOfAllThatIsHolyPleaseChangeThisAndRemoveTheRand(1,999..)' . rand(1, 9999999),
     'db' => [
         'host'     => 'localhost',        // MySQL host
         'port'     => 3306,               // Optional: MySQL port
