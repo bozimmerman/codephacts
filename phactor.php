@@ -382,10 +382,20 @@ function rrmdir($dir)
         foreach ($files as $file)
         {
             $path = $dir . DIRECTORY_SEPARATOR . $file;
-            is_dir($path) ? rrmdir($path) : unlink($path);
+            
+            if (is_dir($path))
+            {
+                rrmdir($path);
+            }
+            else
+            {
+                @chmod($path, 0777);
+                @unlink($path);
+            }
         }
         
-        rmdir($dir);
+        @chmod($dir, 0777);
+        @rmdir($dir);
 }
 
 $rules = [];
