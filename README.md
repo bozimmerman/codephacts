@@ -1,19 +1,19 @@
 # CodePhacts
 
-A code statistics and project cost estimation web app that tracks lines of code, languages, 
+A code statistics and project estimation web app that tracks lines of code, languages, 
 commits, and generates fun cost estimates across multiple programming languages.
 
 ## Overview
 
 CodePhacts is a PHP-based web application that analyzes source code repositories (Git and SVN), 
-tracks code statistics over time, and provides detailed cost estimations using five different 
-industry-standard models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
+tracks code statistics over time, and provides detailed estimations using five different 
+cost models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
 
 ### Key Features
 
 - **Multi-Language Support**: Analyzes 30+ programming languages including Java, C/C++, Python, JavaScript, PHP, Assembly, and more
 - **Repository Integration**: Direct integration with Git and SVN repositories
-- **Historical Tracking**: Tracks code evolution through commits over time
+- **Historical Tracking**: Tracks code evolution through commits and code lines over time
 - **Cost Estimation Models**: Five estimation models with comparative analysis
 - **Visual Analytics**: Interactive charts showing code growth, composition, and commit activity
 - **Project Management**: Multi-project support with individual statistics and reporting
