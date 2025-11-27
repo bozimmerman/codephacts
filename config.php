@@ -33,8 +33,5 @@ return [
         'projects'      => 'projects',
         'statistics' => 'statistics',
         'commits'       => 'commits'
-    ],
-    'debug' => true,       // Enable debug logging
-    'timezone' => 'UTC',   // Default timezone for timestamps
-    
+    ]
 ];
