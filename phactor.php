@@ -391,7 +391,8 @@ function processFile($filePath, $ext, &$report)
     }
     foreach ($analyzers as $analyzer)
     {
-        $lang = $analyzer['ext'];
+        //$lang = $analyzer['ext'];
+        $lang = $analyzer['rule']['language'];
         $lines = $analyzer['lines'];
         $rule = $analyzer['rule'];
         $stats = analyzeFile($rule, $lines);
