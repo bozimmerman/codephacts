@@ -32,77 +32,149 @@ try
     
     if (!$project)
         die("Project not found");
-        
-        // Get latest language statistics
-        $stmt = $pdo->prepare("
-        SELECT
-            s.language,
-            s.total_lines,
-            s.code_lines,
-            s.comment_lines,
-            s.blank_lines
-        FROM {$config['tables']['statistics']} s
-        INNER JOIN (
-            SELECT MAX(commit_id) as max_commit_id
-            FROM {$config['tables']['statistics']}
-            WHERE project_id = ?
-        ) latest ON s.commit_id = latest.max_commit_id
-        WHERE s.project_id = ?
-        ORDER BY s.code_lines DESC
+    $stmt = $pdo->prepare("
+    SELECT
+        s.language,
+        s.total_lines,
+        s.code_lines,
+        s.comment_lines,
+        s.blank_lines
+    FROM {$config['tables']['statistics']} s
+    INNER JOIN (
+        SELECT MAX(commit_id) as max_commit_id
+        FROM {$config['tables']['statistics']}
+        WHERE project_id = ?
+    ) latest ON s.commit_id = latest.max_commit_id
+    WHERE s.project_id = ?
+    ORDER BY s.code_lines DESC
     ");
-        $stmt->execute([$projectId, $projectId]);
-        $languages = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Calculate totals for percentages
-        $totals = [
-            'total_lines' => 0,
-            'code_lines' => 0,
-            'comment_lines' => 0,
-            'blank_lines' => 0
-        ];
-        foreach ($languages as $lang) {
-            $totals['total_lines'] += $lang['total_lines'];
-            $totals['code_lines'] += $lang['code_lines'];
-            $totals['comment_lines'] += $lang['comment_lines'];
-            $totals['blank_lines'] += $lang['blank_lines'];
-        }
-        
-        // Get all commits with their statistics for timeline charts
-        $stmt = $pdo->prepare("
-        SELECT
-            c.commit_hash,
-            c.commit_timestamp,
-            SUM(s.code_lines) as total_code_lines
-        FROM {$config['tables']['commits']} c
-        INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
-        WHERE c.project_id = ?
-        GROUP BY c.id, c.commit_hash, c.commit_timestamp
-        ORDER BY c.commit_timestamp ASC
-        ");
-        $stmt->execute([$projectId]);
-        $allCommits = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Get recent commits for display table
-        $stmt = $pdo->prepare("
-        SELECT
-            c.commit_hash,
-            c.commit_timestamp,
-            SUM(s.code_lines) as total_code_lines
-        FROM {$config['tables']['commits']} c
-        LEFT JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
-        WHERE c.project_id = ?
-        GROUP BY c.id, c.commit_hash, c.commit_timestamp
-        ORDER BY c.commit_timestamp DESC
-        LIMIT 20
+    $stmt->execute([$projectId, $projectId]);
+    $languages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $totals = [
+        'total_lines' => 0,
+        'code_lines' => 0,
+        'comment_lines' => 0,
+        'blank_lines' => 0
+    ];
+    foreach ($languages as $lang) {
+        $totals['total_lines'] += $lang['total_lines'];
+        $totals['code_lines'] += $lang['code_lines'];
+        $totals['comment_lines'] += $lang['comment_lines'];
+        $totals['blank_lines'] += $lang['blank_lines'];
+    }
+    $stmt = $pdo->prepare("
+    SELECT
+        c.commit_hash,
+        c.commit_timestamp,
+        SUM(s.code_lines) as total_code_lines
+    FROM {$config['tables']['commits']} c
+    INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+    WHERE c.project_id = ?
+    GROUP BY c.id, c.commit_hash, c.commit_timestamp
+    ORDER BY c.commit_timestamp ASC
     ");
-        $stmt->execute([$projectId]);
-        $commits = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
+    $stmt->execute([$projectId]);
+    $allCommits = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $pdo->prepare("
+    SELECT
+        c.commit_hash,
+        c.commit_timestamp,
+        SUM(s.code_lines) as total_code_lines
+    FROM {$config['tables']['commits']} c
+    LEFT JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+    WHERE c.project_id = ?
+    GROUP BY c.id, c.commit_hash, c.commit_timestamp
+    ORDER BY c.commit_timestamp DESC
+    LIMIT 20
+    ");
+    $stmt->execute([$projectId]);
+    $commits = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 catch (PDOException $e)
 {
     die("Database error: " . $e->getMessage());
 }
+
+function determineOptimalGrouping($commits, $targetDataPoints = 100)
+{
+    if (empty($commits) || count($commits) <= 1)
+        return ['interval' => 'day', 'intervalDays' => 1];
+    $firstCommit = strtotime($commits[0]['commit_timestamp']);
+    $lastCommit = strtotime($commits[count($commits) - 1]['commit_timestamp']);
+    $totalDays = ceil(($lastCommit - $firstCommit) / 86400);
+    if ($totalDays <= $targetDataPoints)
+        return ['interval' => 'day', 'intervalDays' => 1];
+    $intervals = [
+        ['interval' => 'day', 'intervalDays' => 1],
+        ['interval' => '3 days', 'intervalDays' => 3],
+        ['interval' => 'week', 'intervalDays' => 7],
+        ['interval' => '2 weeks', 'intervalDays' => 14],
+        ['interval' => 'month', 'intervalDays' => 30],
+        ['interval' => 'quarter', 'intervalDays' => 90],
+        ['interval' => 'year', 'intervalDays' => 365]
+    ];
+    $bestInterval = $intervals[0];
+    $bestDifference = abs($targetDataPoints - ($totalDays / $intervals[0]['intervalDays']));
+    foreach ($intervals as $interval) 
+    {
+        $resultingPoints = $totalDays / $interval['intervalDays'];
+        $difference = abs($targetDataPoints - $resultingPoints);
+        if ($resultingPoints >= 50 && $resultingPoints <= 150) 
+        {
+            if ($difference < $bestDifference) 
+            {
+                $bestInterval = $interval;
+                $bestDifference = $difference;
+            }
+        }
+    }
+    return $bestInterval;
+}
+
+function groupCommitsByInterval($commits, $intervalDays)
+{
+    if (empty($commits))
+        return ['labels' => [], 'changes' => []];
+    $groupedData = [];
+    foreach ($commits as $commit)
+    {
+        if (!$commit['total_code_lines'] || $commit['total_code_lines'] === null)
+            continue;
+        $date = new DateTime($commit['commit_timestamp']);
+        $timestamp = $date->getTimestamp();
+        $bucketKey = floor($timestamp / ($intervalDays * 86400)) * ($intervalDays * 86400);
+        $codeLines = (int)$commit['total_code_lines'];
+        if (!isset($groupedData[$bucketKey])) 
+        {
+            $groupedData[$bucketKey] = [
+                'commits' => [],
+                'codeLines' => []
+            ];
+        }
+        $groupedData[$bucketKey]['commits'][] = $commit;
+        $groupedData[$bucketKey]['codeLines'][] = $codeLines;
+    }
+    ksort($groupedData);
+    $labels = [];
+    $changes = [];
+    $previousAvg = null;
+    
+    foreach ($groupedData as $bucketKey => $data) 
+    {
+        $date = new DateTime();
+        $date->setTimestamp($bucketKey);
+        $labels[] = $date->format('Y-m-d');
+        $currentAvg = array_sum($data['codeLines']) / count($data['codeLines']);
+        if ($previousAvg === null)
+            $changes[] = 0;
+        else
+            $changes[] = round($currentAvg - $previousAvg);
+        $previousAvg = $currentAvg;
+    }
+    return ['labels' => $labels, 'changes' => $changes];
+}
+$grouping = determineOptimalGrouping($allCommits);
+$groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
 ?>
 <!DOCTYPE html>
 <html>
@@ -226,60 +298,21 @@ catch (PDOException $e)
     <script>
     <?php if (!empty($allCommits) && count($allCommits) > 1): ?>
     const commits = <?= json_encode($allCommits) ?>;
-    function groupCommitsByWeek(commits) 
-    {
-        const weeklyData = {};
-        for (let i = 0; i < commits.length; i++) 
-        {
-            if (!commits[i].total_code_lines || commits[i].total_code_lines === null)
-                continue;
-            const date = new Date(commits[i].commit_timestamp);
-            const weekStart = new Date(date);
-            weekStart.setDate(date.getDate() - date.getDay());
-            const weekKey = weekStart.toISOString().split('T')[0];
-            const codeLines = parseInt(commits[i].total_code_lines) || 0;
-            if (!weeklyData[weekKey]) 
-            {
-                weeklyData[weekKey] = 
-                {
-                    commits: [],
-                    codeLines: []
-                };
-            }
-            weeklyData[weekKey].commits.push(commits[i]);
-            weeklyData[weekKey].codeLines.push(codeLines);
-        }
-        const weeks = Object.keys(weeklyData).sort();
-        const labels = [];
-        const changes = [];
-        for (let i = 0; i < weeks.length; i++) 
-        {
-            const weekData = weeklyData[weeks[i]];
-            labels.push(weeks[i]);
-            if (i === 0)
-                changes.push(0);
-            else 
-            {
-                const prevWeekData = weeklyData[weeks[i-1]];
-                const currentAvg = weekData.codeLines.reduce((a, b) => a + b, 0) / weekData.codeLines.length;
-                const prevAvg = prevWeekData.codeLines.reduce((a, b) => a + b, 0) / prevWeekData.codeLines.length;
-                changes.push(Math.round(currentAvg - prevAvg));
-            }
-        }
-        return { labels, changes };
-    }
-    const weeklyData = groupCommitsByWeek(commits);
-    // Lines of Code Over Time Chart - showing weekly average changes
+    const commitData = {
+        labels: <?= json_encode($groupedData['labels']) ?>,
+        changes: <?= json_encode($groupedData['changes']) ?>,
+        interval: '<?= $grouping['interval'] ?>'
+    };
     const codeCtx = document.getElementById('codeHistoryChart');
     new Chart(codeCtx, {
         type: 'bar',
         data: {
-            labels: weeklyData.labels.map(d => new Date(d).toLocaleDateString()),
+            labels: commitData.labels.map(d => new Date(d).toLocaleDateString()),
             datasets: [{
-                label: 'Average Lines Added/Removed per Week',
-                data: weeklyData.changes,
-                backgroundColor: weeklyData.changes.map(v => v >= 0 ? 'rgba(40, 167, 69, 0.7)' : 'rgba(220, 53, 69, 0.7)'),
-                borderColor: weeklyData.changes.map(v => v >= 0 ? '#28a745' : '#dc3545'),
+                label: `Average Lines Added/Removed per ${commitData.interval}`,
+                data: commitData.changes,
+                backgroundColor: commitData.changes.map(v => v >= 0 ? 'rgba(40, 167, 69, 0.7)' : 'rgba(220, 53, 69, 0.7)'),
+                borderColor: commitData.changes.map(v => v >= 0 ? '#28a745' : '#dc3545'),
                 borderWidth: 1
             }]
         },
@@ -302,7 +335,7 @@ catch (PDOException $e)
                 x: {
                     title: {
                         display: true,
-                        text: 'Week Starting'
+                        text: `Time Period (${commitData.interval})`
                     }
                 }
             },
@@ -323,7 +356,6 @@ catch (PDOException $e)
         }
     });
 
-    // Commit Activity Chart - group commits by date
     const commitsByDate = {};
     commits.forEach(c => {
         const date = new Date(c.commit_timestamp).toLocaleDateString();
