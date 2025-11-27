@@ -570,7 +570,13 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                 <canvas id="codeHistoryChart"></canvas>
             </div>
         </div>
-		<div class="card">
+        <div class="card">
+            <h2>Total Lines of Code Growth</h2>
+            <div class="chart-container" style="height: 300px;">
+                <canvas id="totalLinesChart"></canvas>
+            </div>
+        </div>
+        <div class="card">
             <h2>Code Composition Analysis</h2>
             <div class="chart-container" style="height: 300px;">
                 <canvas id="compositionChart"></canvas>
@@ -1012,6 +1018,78 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                             const transformedValue = context.parsed.y;
                             const realValue = Math.round(Math.pow(transformedValue, 2));
                             return 'Commits: ' + realValue;
+                        }
+                    }
+                }
+            }
+        }
+    });
+    // Total Lines of Code Growth Chart
+    const totalLinesData = [];
+    const totalLinesLabels = [];
+    commits.forEach(c => 
+    {
+        if (c.total_code_lines && c.total_code_lines > 0) 
+        {
+            totalLinesLabels.push(new Date(c.commit_timestamp).toLocaleDateString());
+            totalLinesData.push(parseInt(c.total_code_lines));
+        }
+    });
+    const totalLinesCtx = document.getElementById('totalLinesChart');
+    new Chart(totalLinesCtx, 
+    {
+        type: 'line',
+        data: {
+            labels: totalLinesLabels,
+            datasets: [{
+                label: 'Total Lines of Code',
+                data: totalLinesData,
+                borderColor: '#007bff',
+                backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.1,
+                pointRadius: 0,
+                pointHoverRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Lines of Code'
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            return value.toLocaleString();
+                        }
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Commit Date'
+                    },
+                    ticks: {
+                        maxTicksLimit: 20,
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return 'Total LOC: ' + context.parsed.y.toLocaleString();
                         }
                     }
                 }
