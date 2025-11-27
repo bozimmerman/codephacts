@@ -379,6 +379,34 @@ function updateStatistics($projectId, $commitId, $report)
     global $config, $pdo;
     
     $statsTable = isset($config['tables']['statistics']) ? $config['tables']['statistics'] : 'statistics';
+
+    if (empty($report))
+    {
+        error_log("WARNING: Commit ID $commitId for project ID $projectId has no recognizable files. Querying for existing language.");
+        $stmt = $pdo->prepare("
+            SELECT language
+            FROM `$statsTable`
+            WHERE project_id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$projectId]);
+        $existingLang = $stmt->fetchColumn();
+        
+        if (!$existingLang)
+            $existingLang = 'n/a';
+        $report = [
+            $existingLang => [
+                'total_lines' => 0,
+                'code_lines' => 0,
+                'code_statements' => 0,
+                'weighted_code_statements' => 0,
+                'weighted_code_lines' => 0,
+                'blank_lines' => 0,
+                'comment_lines' => 0,
+                'ncloc' => 0
+            ]
+        ];
+    }
     
     foreach ($report as $lang => $stats)
     {
