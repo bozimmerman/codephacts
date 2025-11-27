@@ -17,7 +17,7 @@
 
 return [
     'extensions' => ['css', 'scss', 'sass', 'less'],
-    'language' => 'CSS',
+    'language' => 'css',
     'analyzer' => function(&$stats, $lines)
     {
         $inBlockComment = false;
