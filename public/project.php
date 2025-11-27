@@ -32,7 +32,7 @@ try
     
     if (!$project)
         die("Project not found");
-        $stmt = $pdo->prepare("
+    $stmt = $pdo->prepare("
     SELECT
         s.language,
         s.total_lines,
@@ -48,21 +48,21 @@ try
     WHERE s.project_id = ?
     ORDER BY s.code_lines DESC
     ");
-        $stmt->execute([$projectId, $projectId]);
-        $languages = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $totals = [
-            'total_lines' => 0,
-            'code_lines' => 0,
-            'comment_lines' => 0,
-            'blank_lines' => 0
-        ];
-        foreach ($languages as $lang) {
-            $totals['total_lines'] += $lang['total_lines'];
-            $totals['code_lines'] += $lang['code_lines'];
-            $totals['comment_lines'] += $lang['comment_lines'];
-            $totals['blank_lines'] += $lang['blank_lines'];
-        }
-        $stmt = $pdo->prepare("
+    $stmt->execute([$projectId, $projectId]);
+    $languages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $totals = [
+        'total_lines' => 0,
+        'code_lines' => 0,
+        'comment_lines' => 0,
+        'blank_lines' => 0
+    ];
+    foreach ($languages as $lang) {
+        $totals['total_lines'] += $lang['total_lines'];
+        $totals['code_lines'] += $lang['code_lines'];
+        $totals['comment_lines'] += $lang['comment_lines'];
+        $totals['blank_lines'] += $lang['blank_lines'];
+    }
+    $stmt = $pdo->prepare("
     SELECT
         c.commit_hash,
         c.commit_timestamp,
@@ -73,22 +73,37 @@ try
     GROUP BY c.id, c.commit_hash, c.commit_timestamp
     ORDER BY c.commit_timestamp ASC
     ");
-        $stmt->execute([$projectId]);
-        $allCommits = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $stmt = $pdo->prepare("
+    $stmt->execute([$projectId]);
+    $allCommits = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $commitPage = isset($_GET['commit_page']) ? max(1, (int)$_GET['commit_page']) : 1;
+    $commitsPerPage = 20;
+    $commitOffset = ($commitPage - 1) * $commitsPerPage;
+    
+    // Get total commit count for pagination
+    $commitCountStmt = $pdo->prepare("
+    SELECT COUNT(*)
+    FROM {$config['tables']['commits']} c
+    INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+    WHERE c.project_id = ?
+    ");
+    $commitCountStmt->execute([$projectId]);
+    $totalCommits = $commitCountStmt->fetchColumn();
+    $totalCommitPages = ceil($totalCommits / $commitsPerPage);
+    $stmt = $pdo->prepare("
     SELECT
         c.commit_hash,
         c.commit_timestamp,
+        c.commit_user,
         SUM(s.code_lines) as total_code_lines
     FROM {$config['tables']['commits']} c
     LEFT JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
     WHERE c.project_id = ?
     GROUP BY c.id, c.commit_hash, c.commit_timestamp
     ORDER BY c.commit_timestamp DESC
-    LIMIT 20
+    LIMIT {$commitsPerPage} OFFSET {$commitOffset}
     ");
-        $stmt->execute([$projectId]);
-        $commits = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt->execute([$projectId]);
+    $commits = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 catch (PDOException $e)
 {
@@ -503,6 +518,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
     <div class="container">
         <div class="card">
             <h2><?= htmlspecialchars($project['name']) ?></h2>
+            <p><strong>Manager Name:</strong> <?= htmlspecialchars($project['manager'] ?? 'None') ?></p>
             <p><strong>Repository Type:</strong> <?= htmlspecialchars($project['source_type']) ?></p>
             <p><strong>Last Commit:</strong> <?= htmlspecialchars($project['last_commit'] ? $project['last_commit'] : 'None') ?></p>
             <p><strong>Last Updated:</strong> <?= htmlspecialchars($project['last_updated'] ? $project['last_updated'] : 'Never') ?></p>
@@ -554,7 +570,13 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                 <canvas id="codeHistoryChart"></canvas>
             </div>
         </div>
-
+		<div class="card">
+            <h2>Code Composition Analysis</h2>
+            <div class="chart-container" style="height: 300px;">
+                <canvas id="compositionChart"></canvas>
+            </div>
+        </div>
+        
         <div class="card">
             <h2>Commit Activity Over Time</h2>
             <div class="chart-container" style="height: 300px;">
@@ -815,6 +837,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                     <thead>
                         <tr>
                             <th>Commit</th>
+                            <th>User</th>
                             <th>Date</th>
                             <th>Total Code Lines</th>
                         </tr>
@@ -823,12 +846,28 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                         <?php foreach ($commits as $commit): ?>
                             <tr>
                                 <td><?= htmlspecialchars(substr($commit['commit_hash'], 0, 10)) ?></td>
+                                <td><?= htmlspecialchars($commit['commit_user'] ?? 'None') ?></td>
                                 <td><?= htmlspecialchars($commit['commit_timestamp']) ?></td>
                                 <td><?= number_format($commit['total_code_lines'] ?? 0) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+                <?php if ($totalCommitPages > 1): ?>
+                    <div style="margin-top: 20px; text-align: center;">
+                        <?php if ($commitPage > 1): ?>
+                            <a href="?id=<?= $projectId ?>&commit_page=<?= $commitPage - 1 ?>" class="button">← Previous</a>
+                        <?php endif; ?>
+                        
+                        <span style="margin: 0 15px; color: #6c757d;">
+                            Page <?= $commitPage ?> of <?= $totalCommitPages ?> (<?= number_format($totalCommits) ?> total commits)
+                        </span>
+                        
+                        <?php if ($commitPage < $totalCommitPages): ?>
+                            <a href="?id=<?= $projectId ?>&commit_page=<?= $commitPage + 1 ?>" class="button">Next →</a>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
 
@@ -852,7 +891,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
             labels: commitData.labels.map(d => new Date(d).toLocaleDateString()),
             datasets: [{
                 label: `Average Lines Added/Removed per ${commitData.interval}`,
-                data: commitData.changes,
+                data: commitData.changes.map(v => v >= 0 ? Math.sqrt(v) : -Math.sqrt(Math.abs(v))),
                 backgroundColor: commitData.changes.map(v => v >= 0 ? 'rgba(40, 167, 69, 0.7)' : 'rgba(220, 53, 69, 0.7)'),
                 borderColor: commitData.changes.map(v => v >= 0 ? '#28a745' : '#dc3545'),
                 borderWidth: 1
@@ -866,11 +905,14 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                     beginAtZero: true,
                     title: {
                         display: true,
-                        text: 'Average Lines Changed'
+                        text: 'Average Lines Changed (sqrt scale)'
                     },
                     ticks: {
                         callback: function(value) {
-                            return value >= 0 ? '+' + value : value;
+                            const realValue = value >= 0 
+                                ? Math.pow(value, 2) 
+                                : -Math.pow(Math.abs(value), 2);
+                            return (realValue >= 0 ? '+' : '') + Math.round(realValue);
                         }
                     }
                 },
@@ -889,8 +931,11 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                 tooltip: {
                     callbacks: {
                         label: function(context) {
-                            const value = context.parsed.y;
-                            return 'Avg change: ' + (value >= 0 ? '+' + value : value) + ' lines';
+                            const transformedValue = context.parsed.y;
+                            const realValue = transformedValue >= 0 
+                                ? Math.pow(transformedValue, 2) 
+                                : -Math.pow(Math.abs(transformedValue), 2);
+                            return 'Avg change: ' + (realValue >= 0 ? '+' + Math.round(realValue) : Math.round(realValue)) + ' lines';
                         }
                     }
                 }
@@ -898,21 +943,36 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         }
     });
 
-    const commitsByDate = {};
-    commits.forEach(c => {
-        const date = new Date(c.commit_timestamp).toLocaleDateString();
-        commitsByDate[date] = (commitsByDate[date] || 0) + 1;
-    });
-    const activityLabels = Object.keys(commitsByDate);
-    const activityCounts = Object.values(commitsByDate);
+ // Commit Activity Chart (using the same grouping as code history)
+    function groupCommitActivity(commits, intervalDays) {
+        const grouped = {};
+        commits.forEach(c => {
+            const date = new Date(c.commit_timestamp);
+            const timestamp = Math.floor(date.getTime() / 1000);
+            const bucketKey = Math.floor(timestamp / (intervalDays * 86400)) * (intervalDays * 86400);
+            grouped[bucketKey] = (grouped[bucketKey] || 0) + 1;
+        });
+        
+        const labels = [];
+        const counts = [];
+        Object.keys(grouped).sort().forEach(key => {
+            const date = new Date(parseInt(key) * 1000);
+            labels.push(date.toLocaleDateString());
+            counts.push(grouped[key]);
+        });
+        
+        return { labels, counts };
+    }
+
+    const activityData = groupCommitActivity(commits, <?= $grouping['intervalDays'] ?>);
     const activityCtx = document.getElementById('commitActivityChart');
     new Chart(activityCtx, {
         type: 'bar',
         data: {
-            labels: activityLabels,
+            labels: activityData.labels,
             datasets: [{
                 label: 'Number of Commits',
-                data: activityCounts,
+                data: activityData.counts.map(v => Math.sqrt(v)),
                 backgroundColor: '#28a745',
                 borderColor: '#28a745',
                 borderWidth: 1
@@ -925,7 +985,9 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                 y: {
                     beginAtZero: true,
                     ticks: {
-                        stepSize: 1
+                        callback: function(value) {
+                            return Math.round(Math.pow(value, 2));
+                        }
                     },
                     title: {
                         display: true,
@@ -935,7 +997,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                 x: {
                     title: {
                         display: true,
-                        text: 'Date'
+                        text: `Time Period (${commitData.interval})`
                     }
                 }
             },
@@ -943,11 +1005,77 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                 legend: {
                     display: true,
                     position: 'top'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const transformedValue = context.parsed.y;
+                            const realValue = Math.round(Math.pow(transformedValue, 2));
+                            return 'Commits: ' + realValue;
+                        }
+                    }
                 }
             }
         }
     });
     <?php endif; ?>
+    <?php if (!empty($languages)): ?>
+    // Code Composition Chart
+    const compositionCtx = document.getElementById('compositionChart');
+    new Chart(compositionCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Code Lines', 'Comment Lines', 'Blank Lines'],
+            datasets: [{
+                label: 'Percentage',
+                data: [
+                    <?= $totals['total_lines'] > 0 ? number_format(($totals['code_lines'] / $totals['total_lines']) * 100, 1) : 0 ?>,
+                    <?= $totals['total_lines'] > 0 ? number_format(($totals['comment_lines'] / $totals['total_lines']) * 100, 1) : 0 ?>,
+                    <?= $totals['total_lines'] > 0 ? number_format(($totals['blank_lines'] / $totals['total_lines']) * 100, 1) : 0 ?>
+                ],
+                backgroundColor: [
+                    'rgba(40, 167, 69, 0.7)',
+                    'rgba(0, 123, 255, 0.7)',
+                    'rgba(108, 117, 125, 0.7)'
+                ],
+                borderColor: [
+                    '#28a745',
+                    '#007bff',
+                    '#6c757d'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Percentage (%)'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.parsed.x.toFixed(1) + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+    <?php endif; ?>
+    
     </script>
 
     <footer style="text-align: center; padding: 20px; margin-top: 40px; font-size: 0.8em; color: #999;">

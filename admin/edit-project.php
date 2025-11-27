@@ -23,7 +23,8 @@ $project = [
     'name' => '',
     'source_type' => 'git',
     'source_url' => '',
-    'excluded_dirs' => ''
+    'excluded_dirs' => '',
+    'manager' => ''
 ];
 
 try
@@ -49,6 +50,7 @@ try
         $source_type = $_POST['source_type'];
         $source_url = trim($_POST['source_url']);
         $excluded_dirs = trim($_POST['excluded_dirs']);
+        $manager = trim($_POST['manager']);
         
         if (empty($name) || empty($source_url))
             $error = "Name and URL are required";
@@ -58,19 +60,19 @@ try
             {
                 $stmt = $pdo->prepare("
                     UPDATE {$config['tables']['projects']} 
-                    SET name = ?, source_type = ?, source_url = ?, excluded_dirs = ?
+                    SET name = ?, source_type = ?, source_url = ?, excluded_dirs = ?, manager = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$name, $source_type, $source_url, $excluded_dirs, $project['id']]);
+                $stmt->execute([$name, $source_type, $source_url, $excluded_dirs, $manager, $project['id']]);
                 $message = "Project updated successfully";
             } 
             else 
             {
                 $stmt = $pdo->prepare("
-                    INSERT INTO {$config['tables']['projects']} (name, source_type, source_url, excluded_dirs)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO {$config['tables']['projects']} (name, source_type, source_url, excluded_dirs, manager)
+                    VALUES (?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$name, $source_type, $source_url, $excluded_dirs]);
+                $stmt->execute([$name, $source_type, $source_url, $excluded_dirs], $manager);
                 $message = "Project added successfully";
             }
             header('Location: projects.php');
@@ -132,6 +134,9 @@ catch (PDOException $e)
                 <label>Excluded Directories</label>
                 <input type="text" name="excluded_dirs" value="<?= htmlspecialchars($project['excluded_dirs']) ?>" placeholder="/vendor,/extra/pages">
                 <small style="color: #6c757d;">Comma-separated dir paths exclude (e.g., /vendor,/extra/pages)</small>
+
+                <label>Manager</label>
+                <input type="text" name="manager" value="<?= htmlspecialchars($project['manager'] ?? '') ?>" placeholder="John Doe">
                 
                 <div style="margin-top: 20px;">
                     <button type="submit"><?= $project['id'] ? 'Update' : 'Add' ?> Project</button>
