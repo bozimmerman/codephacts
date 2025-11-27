@@ -24,7 +24,11 @@ $project = [
     'source_type' => 'git',
     'source_url' => '',
     'excluded_dirs' => '',
-    'manager' => ''
+    'manager' => '',
+    'auth_type' => 'none',
+    'auth_username' => '',
+    'auth_password' => '',
+    'auth_ssh_key_path' => ''
 ];
 
 try
@@ -51,6 +55,10 @@ try
         $source_url = trim($_POST['source_url']);
         $excluded_dirs = trim($_POST['excluded_dirs']);
         $manager = trim($_POST['manager']);
+        $auth_type = $_POST['auth_type'];
+        $auth_username = trim($_POST['auth_username']);
+        $auth_password = trim($_POST['auth_password']);
+        $auth_ssh_key_path = trim($_POST['auth_ssh_key_path']);
         
         if (empty($name) || empty($source_url))
             $error = "Name and URL are required";
@@ -60,19 +68,23 @@ try
             {
                 $stmt = $pdo->prepare("
                     UPDATE {$config['tables']['projects']} 
-                    SET name = ?, source_type = ?, source_url = ?, excluded_dirs = ?, manager = ?
+                    SET name = ?, source_type = ?, source_url = ?, excluded_dirs = ?, manager = ?,
+                        auth_type = ?, auth_username = ?, auth_password = ?, auth_ssh_key_path = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$name, $source_type, $source_url, $excluded_dirs, $manager, $project['id']]);
+                $stmt->execute([$name, $source_type, $source_url, $excluded_dirs, $manager,
+                    $auth_type, $auth_username, $auth_password, $auth_ssh_key_path, $project['id']]);
                 $message = "Project updated successfully";
             } 
             else 
             {
                 $stmt = $pdo->prepare("
-                    INSERT INTO {$config['tables']['projects']} (name, source_type, source_url, excluded_dirs, manager)
+                    INSERT INTO {$config['tables']['projects']} (name, source_type, source_url, excluded_dirs, manager,
+                                auth_type, auth_username, auth_password, auth_ssh_key_path
                     VALUES (?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$name, $source_type, $source_url, $excluded_dirs], $manager);
+                $stmt->execute([$name, $source_type, $source_url, $excluded_dirs, $manager,
+                    $auth_type, $auth_username, $auth_password, $auth_ssh_key_path]);
                 $message = "Project added successfully";
             }
             header('Location: projects.php');
@@ -138,6 +150,31 @@ catch (PDOException $e)
                 <label>Manager</label>
                 <input type="text" name="manager" value="<?= htmlspecialchars($project['manager'] ?? '') ?>" placeholder="John Doe">
                 
+               <label>Repository Authentication Type</label>
+                <select name="auth_type" id="auth_type" onchange="toggleAuthFields()">
+                    <option value="none" <?= $project['auth_type'] === 'none' ? 'selected' : '' ?>>None (Public Repository)</option>
+                    <option value="basic" <?= $project['auth_type'] === 'basic' ? 'selected' : '' ?>>Username/Password (HTTPS)</option>
+                    <option value="ssh" <?= $project['auth_type'] === 'ssh' ? 'selected' : '' ?>>SSH Key</option>
+                </select>
+                
+                <div id="basic_auth_fields" style="display: none;">
+                    <label>Username</label>
+                    <input type="text" name="auth_username" id="auth_username" value="<?= htmlspecialchars($project['auth_username'] ?? '') ?>" placeholder="username">
+                    
+                    <label>Password / Personal Access Token</label>
+                    <input type="password" name="auth_password" id="auth_password" value="<?= htmlspecialchars($project['auth_password'] ?? '') ?>" placeholder="password or token">
+                    <small style="color: #6c757d;">Note: Stored in plaintext. Use personal access tokens when possible.</small>
+                </div>
+                
+                <div id="ssh_auth_fields" style="display: none;">
+                    <label>SSH Private Key Path</label>
+                    <input type="text" name="auth_ssh_key_path" id="auth_ssh_key_path" value="<?= htmlspecialchars($project['auth_ssh_key_path'] ?? '') ?>" placeholder="/home/user/.ssh/id_rsa">
+                    <small style="color: #6c757d;">Full path to SSH private key file on server.</small>
+                    
+                    <label>SSH Key Passphrase (optional)</label>
+                    <input type="password" name="auth_password" id="ssh_passphrase" value="<?= htmlspecialchars($project['auth_password'] ?? '') ?>" placeholder="passphrase if key is encrypted">
+                </div>
+
                 <div style="margin-top: 20px;">
                     <button type="submit"><?= $project['id'] ? 'Update' : 'Add' ?> Project</button>
                     <a href="projects.php" class="button secondary">Cancel</a>
@@ -163,5 +200,13 @@ catch (PDOException $e)
             </div>
         <?php endif; ?>
     </div>
+    <script>
+        function toggleAuthFields() {
+            var authType = document.getElementById('auth_type').value;
+            document.getElementById('basic_auth_fields').style.display = (authType === 'basic') ? 'block' : 'none';
+            document.getElementById('ssh_auth_fields').style.display = (authType === 'ssh') ? 'block' : 'none';
+        }
+        toggleAuthFields();
+    </script>
 </body>
 </html>

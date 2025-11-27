@@ -45,7 +45,7 @@ function outputProgress($type, $message, $data = [])
     */
 }
 
-function canAccessRepo($sourceType, $sourceUrl)
+function canAccessRepo($sourceType, $sourceUrl, $authType = 'none', $authUsername = null, $authPassword = null, $authSshKeyPath = null)
 {
     if ($sourceType === 'git')
     {
@@ -53,6 +53,7 @@ function canAccessRepo($sourceType, $sourceUrl)
         if (stripos($gitVersion, 'git version') === false)
             return false;
         $cmd = "git ls-remote " . escapeshellarg($sourceUrl) . " HEAD 2>&1";
+        $cmd = buildAuthenticatedCommand($sourceType, $sourceUrl, $authType, $authUsername, $authPassword, $authSshKeyPath, $cmd);
         $output = trim(shell_exec($cmd));
         if (empty($output) || stripos($output, 'fatal') !== false)
             return false;
@@ -64,6 +65,7 @@ function canAccessRepo($sourceType, $sourceUrl)
         if (stripos($svnVersion, 'svn, version') === false)
             return false;
         $cmd = "svn info " . escapeshellarg($sourceUrl) . " 2>&1";
+        $cmd = buildAuthenticatedCommand($sourceType, $sourceUrl, $authType, $authUsername, $authPassword, $authSshKeyPath, $cmd);
         $output = trim(shell_exec($cmd));
         if (empty($output) || stripos($output, 'E170001') !== false || stripos($output, 'Unable to connect') !== false)
             return false;
@@ -73,7 +75,54 @@ function canAccessRepo($sourceType, $sourceUrl)
         throw new InvalidArgumentException("Unsupported source type: $sourceType");
 }
 
-function fetchCommits($sourceType, $sourceUrl, $lastCommit, &$cache = [])
+function buildAuthenticatedCommand($sourceType, $sourceUrl, $authType, $authUsername, $authPassword, $authSshKeyPath, $command)
+{
+    if ($authType === 'none')
+        return $command;
+        
+    if ($sourceType === 'git')
+    {
+        if ($authType === 'basic' && $authUsername && $authPassword)
+        {
+            $parsedUrl = parse_url($sourceUrl);
+            if (isset($parsedUrl['scheme']) && in_array($parsedUrl['scheme'], ['http', 'https']))
+            {
+                $authenticatedUrl = $parsedUrl['scheme'] . '://' .
+                    urlencode($authUsername) . ':' . urlencode($authPassword) . '@' .
+                    $parsedUrl['host'];
+                if (isset($parsedUrl['port']))
+                    $authenticatedUrl .= ':' . $parsedUrl['port'];
+                if (isset($parsedUrl['path']))
+                    $authenticatedUrl .= $parsedUrl['path'];
+                $command = str_replace(escapeshellarg($sourceUrl), escapeshellarg($authenticatedUrl), $command);
+            }
+        }
+        elseif ($authType === 'ssh' && $authSshKeyPath)
+        {
+            $sshCommand = 'ssh -i ' . escapeshellarg($authSshKeyPath) . ' -o StrictHostKeyChecking=no';
+            if ($authPassword)
+                error_log("WARNING: SSH key passphrase provided but cannot be used non-interactively. Use ssh-agent or remove passphrase.");
+            $command = 'GIT_SSH_COMMAND=' . escapeshellarg($sshCommand) . ' ' . $command;
+        }
+    }
+    elseif ($sourceType === 'svn')
+    {
+        if ($authType === 'basic' && $authUsername && $authPassword)
+        {
+            $command .= ' --username ' . escapeshellarg($authUsername) .
+            ' --password ' . escapeshellarg($authPassword) .
+            ' --non-interactive --trust-server-cert';
+        }
+        elseif ($authType === 'ssh' && $authSshKeyPath)
+        {
+            $sshCommand = 'ssh -i ' . escapeshellarg($authSshKeyPath) . ' -o StrictHostKeyChecking=no';
+            $command = 'SVN_SSH=' . escapeshellarg($sshCommand) . ' ' . $command;
+        }
+    }
+    return $command;
+}
+
+function fetchCommits($sourceType, $sourceUrl, $lastCommit, $authType, $authUsername, $authPassword, $authSshKeyPath, &$cache = [])
 {
     $cacheKey = $sourceUrl;
     if (isset($cache[$cacheKey]) && !empty($cache[$cacheKey]))
@@ -83,6 +132,7 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit, &$cache = [])
     {
         $tempRepo = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'git_log_' . md5($sourceUrl . microtime());
         $cloneCmd = "git clone --bare --quiet " . escapeshellarg($sourceUrl) . " " . escapeshellarg($tempRepo) . " 2>&1";
+        $cloneCmd = buildAuthenticatedCommand($sourceType, $sourceUrl, $authType, $authUsername, $authPassword, $authSshKeyPath, $cloneCmd);
         $output = shell_exec($cloneCmd);
         if (!is_dir($tempRepo))
         {
@@ -123,6 +173,7 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit, &$cache = [])
     {
         $startRev = $lastCommit ? ((int)$lastCommit + 1) : 1;
         $cmd = "svn log " . escapeshellarg($sourceUrl) . " -r {$startRev}:HEAD --limit 100 --xml 2>&1";
+        $cmd = buildAuthenticatedCommand($sourceType, $sourceUrl, $authType, $authUsername, $authPassword, $authSshKeyPath, $cmd);
         $output = shell_exec($cmd);
         if (stripos($output, 'E160006') !== false || stripos($output, 'No such revision') !== false)
         {
@@ -161,7 +212,7 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit, &$cache = [])
     return false;
 }
 
-function getNextUnprocessedCommit($projectId, $sourceType, $sourceUrl, $includeCommitsOlderThan, &$cache = []) 
+function getNextUnprocessedCommit($projectId, $sourceType, $sourceUrl, $includeCommitsOlderThan, $authType, $authUsername, $authPassword, $authSshKeyPath, &$cache = []) 
 {
     global $pdo, $config;
     
@@ -178,7 +229,7 @@ function getNextUnprocessedCommit($projectId, $sourceType, $sourceUrl, $includeC
     $stmt->execute([$projectId]);
     $lastCompleted = $stmt->fetchColumn();
 
-    $newCommits = fetchCommits($sourceType, $sourceUrl, $lastCompleted, $cache);
+    $newCommits = fetchCommits($sourceType, $sourceUrl, $lastCompleted, $authType, $authUsername, $authPassword, $authSshKeyPath, $cache);
     if ($newCommits === false || empty($newCommits))
         return null;
     $stmt = $pdo->prepare("
@@ -218,11 +269,12 @@ function getNextUnprocessedCommit($projectId, $sourceType, $sourceUrl, $includeC
     return null;
 }
 
-function fetchCommitCode($commit, $sourceType, $sourceUrl, $tempDir)
+function fetchCommitCode($commit, $sourceType, $sourceUrl, $tempDir, $authType, $authUsername, $authPassword, $authSshKeyPath)
 {
     if ($sourceType === 'git')
     {
         $cloneCmd = "git clone --quiet " . escapeshellarg($sourceUrl) . " " . escapeshellarg($tempDir) . " 2>&1";
+        $cloneCmd = buildAuthenticatedCommand($sourceType, $sourceUrl, $authType, $authUsername, $authPassword, $authSshKeyPath, $cloneCmd);
         $output = shell_exec($cloneCmd);
         if (!is_dir($tempDir . DIRECTORY_SEPARATOR . '.git'))
         {
@@ -230,6 +282,7 @@ function fetchCommitCode($commit, $sourceType, $sourceUrl, $tempDir)
             return false;
         }
         $checkoutCmd = "cd " . escapeshellarg($tempDir) . " && git checkout --quiet " . escapeshellarg($commit['commit']) . " 2>&1";
+        $checkoutCmd = buildAuthenticatedCommand($sourceType, $sourceUrl, $authType, $authUsername, $authPassword, $authSshKeyPath, $checkoutCmd);
         $output = shell_exec($checkoutCmd);
         if ($output && stripos($output, 'error:') !== false)
         {
@@ -538,7 +591,8 @@ function processCommitForProject($project, $commit, $commitId)
     mkdir($tempDir);
     try 
     {
-        $chk = fetchCommitCode( $commit, $project['source_type'], $project['source_url'], $tempDir );
+        $chk = fetchCommitCode( $commit, $project['source_type'], $project['source_url'], $tempDir,
+            $project['auth_type'], $project['auth_username'], $project['auth_password'], $project['auth_ssh_key_path']);
         if ($chk === false)
         {
             error_log("Failed to checkout commit {$commit['commit']} for {$project['name']}");
@@ -601,12 +655,14 @@ function findCommitWithoutStats($projectId)
 
 function tryProcessNextCommitForProject($project, $stale_timeout, &$cache = [])
 {
-    if (!canAccessRepo($project['source_type'], $project['source_url']))
+    if (!canAccessRepo($project['source_type'], $project['source_url'],
+        $project['auth_type'], $project['auth_username'], $project['auth_password'], $project['auth_ssh_key_path']))
     {
         outputProgress('project_skip', "Cannot access repository for {$project['name']}");
         return false;
     }
-    $commit = getNextUnprocessedCommit($project['id'], $project['source_type'], $project['source_url'], $stale_timeout, $cache );
+    $commit = getNextUnprocessedCommit($project['id'], $project['source_type'], $project['source_url'], $stale_timeout,
+        $project['auth_type'], $project['auth_username'], $project['auth_password'], $project['auth_ssh_key_path'], $cache );
     if (!$commit)
     {
         $orphanedCommit = findCommitWithoutStats($project['id']);
@@ -644,7 +700,8 @@ try
         $workFound = false;
         outputProgress('loop_start', "Starting processing loop #{$loopCount}");
         $stmt = $pdo->prepare("
-            SELECT id, name, source_type, source_url, last_commit, excluded_dirs
+            SELECT id, name, source_type, source_url, last_commit, excluded_dirs,
+                   auth_type, auth_username, auth_password, auth_ssh_key_path
             FROM `$projectsTable`
             ORDER BY id ASC
         ");
