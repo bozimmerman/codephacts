@@ -79,7 +79,6 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit, &$cache = [])
     if (isset($cache[$cacheKey]) && !empty($cache[$cacheKey]))
         return $cache[$cacheKey];
     $commits = [];
-    
     if ($sourceType === 'git')
     {
         $tempRepo = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'git_log_' . md5($sourceUrl . microtime());
@@ -124,7 +123,6 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit, &$cache = [])
     {
         $startRev = $lastCommit ? ((int)$lastCommit + 1) : 1;
         $cmd = "svn log " . escapeshellarg($sourceUrl) . " -r {$startRev}:HEAD --limit 100 --xml --quiet 2>&1";
-/*TODO: DELME*/ error_log("Fetching $cmd");
         $output = shell_exec($cmd);
         if (stripos($output, 'E160006') !== false || stripos($output, 'No such revision') !== false)
         {
@@ -178,6 +176,7 @@ function getNextUnprocessedCommit($projectId, $sourceType, $sourceUrl, $includeC
     ");
     $stmt->execute([$projectId]);
     $lastCompleted = $stmt->fetchColumn();
+
     $newCommits = fetchCommits($sourceType, $sourceUrl, $lastCompleted, $cache);
     if ($newCommits === false || empty($newCommits))
         return null;
@@ -202,25 +201,18 @@ function getNextUnprocessedCommit($projectId, $sourceType, $sourceUrl, $includeC
     foreach ($newCommits as $commit) 
     {
         $commitHash = $commit['commit'];
+        $cacheKey = $sourceUrl;
+        if (isset($cache[$cacheKey]))
+            array_shift($cache[$cacheKey]);
         if (!isset($tracked[$commitHash]))
-        {
-            $cacheKey = $sourceUrl;
-            if (isset($cache[$cacheKey]))
-                array_shift($cache[$cacheKey]);
             return $commit;
-        }
         $info = $tracked[$commitHash];
         if (!$info['has_stats'])
             return $commit;
 
-        if ($info['processed_at'] 
+        if ($info['processed_at']
         && $info['processed_at'] < $staleThreshold)
-        {
-            $cacheKey = $sourceUrl;
-            if (isset($cache[$cacheKey]))
-                array_shift($cache[$cacheKey]);
             return $commit;
-        }
     }
     return null;
 }
@@ -553,6 +545,30 @@ function processCommitForProject($project, $commit, $commitId)
     }
 }
 
+function findCommitWithoutStats($projectId)
+{
+    global $pdo, $config;
+    $commitsTable = $config['tables']['commits'] ?? 'commits';
+    $statsTable = $config['tables']['statistics'] ?? 'statistics';
+    $stmt = $pdo->prepare("
+        SELECT c.id, c.commit_hash as commit, UNIX_TIMESTAMP(c.commit_timestamp) as timestamp
+        FROM `$commitsTable` c
+        LEFT JOIN `$statsTable` s ON s.commit_id = c.id
+        WHERE c.project_id = ?
+        AND s.id IS NULL
+        ORDER BY c.commit_timestamp ASC
+        LIMIT 1
+    ");
+    $stmt->execute([$projectId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row)
+        return null;
+    return [
+        'id' => $row['id'],
+        'commit' => ['commit' => $row['commit'], 'timestamp' => $row['timestamp']]
+    ];
+}
+
 function tryProcessNextCommitForProject($project, $stale_timeout, &$cache = [])
 {
     if (!canAccessRepo($project['source_type'], $project['source_url']))
@@ -562,11 +578,17 @@ function tryProcessNextCommitForProject($project, $stale_timeout, &$cache = [])
     }
     $commit = getNextUnprocessedCommit($project['id'], $project['source_type'], $project['source_url'], $stale_timeout, $cache );
     if (!$commit)
-        return false; // No work for this project
+    {
+        $orphanedCommit = findCommitWithoutStats($project['id']);
+        if ($orphanedCommit)
+            return processCommitForProject($project, $orphanedCommit['commit'], $orphanedCommit['id']);
+        return false;
+    }
     $commitId = tryClaimCommit($project['id'], $commit);
     if ($commitId === false) 
     {
         outputProgress('commit_race', "Commit {$commit['commit']} claimed by another process");
+        array_shift($cache[$project['source_url']]);
         return true; // There was work, just not for us - try again
     }
     return processCommitForProject($project, $commit, $commitId);
