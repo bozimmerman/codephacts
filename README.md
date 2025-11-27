@@ -19,6 +19,9 @@ cost models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
 - **Project Management**: Multi-project support with individual statistics and reporting
 - **Flexible Exclusions**: Configurable directory exclusions (e.g., `node_modules`, `vendor`)
 
+![Screenshot of project page](images/Screenshot1.png)
+
+
 ## Installation
 
 ### Prerequisites
