@@ -80,8 +80,8 @@ try
             {
                 $stmt = $pdo->prepare("
                     INSERT INTO {$config['tables']['projects']} (name, source_type, source_url, excluded_dirs, manager,
-                                auth_type, auth_username, auth_password, auth_ssh_key_path
-                    VALUES (?, ?, ?, ?, ?)
+                                auth_type, auth_username, auth_password, auth_ssh_key_path) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $stmt->execute([$name, $source_type, $source_url, $excluded_dirs, $manager,
                     $auth_type, $auth_username, $auth_password, $auth_ssh_key_path]);
