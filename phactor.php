@@ -91,7 +91,7 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit, &$cache = [])
         }
         try
         {
-            $logCmd = "git --git-dir=" . escapeshellarg($tempRepo) . " log --format='%H|%ct'";
+            $logCmd = "git --git-dir=" . escapeshellarg($tempRepo) . " log --format='%H|%ct|%an'";
             if ($lastCommit)
                 $logCmd .= " " . escapeshellarg($lastCommit) . "..HEAD";
             $logOutput = shell_exec($logCmd . " 2>&1");
@@ -104,10 +104,10 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit, &$cache = [])
                 if (empty($line))
                     continue;
                 $parts = explode('|', $line);
-                if (count($parts) != 2)
+                if (count($parts) != 3)
                     continue;
-                list($hash, $timestamp) = $parts;
-                $commits[] = ['commit' => trim($hash), 'timestamp' => (int)$timestamp];
+                list($hash, $timestamp, $author) = $parts;
+                $commits[] = ['commit' => trim($hash), 'timestamp' => (int)$timestamp, 'user' => trim($author)];
             }
             
             $result = array_reverse($commits);
@@ -122,11 +122,11 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit, &$cache = [])
     elseif ($sourceType === 'svn')
     {
         $startRev = $lastCommit ? ((int)$lastCommit + 1) : 1;
-        $cmd = "svn log " . escapeshellarg($sourceUrl) . " -r {$startRev}:HEAD --limit 100 --xml --quiet 2>&1";
+        $cmd = "svn log " . escapeshellarg($sourceUrl) . " -r {$startRev}:HEAD --limit 100 --xml 2>&1";
         $output = shell_exec($cmd);
         if (stripos($output, 'E160006') !== false || stripos($output, 'No such revision') !== false)
         {
-            $cmd = "svn log " . escapeshellarg($sourceUrl) . " --limit 100 --xml --quiet 2>&1";
+            $cmd = "svn log " . escapeshellarg($sourceUrl) . " --limit 100 --xml 2>&1";
             $output = shell_exec($cmd);
         }
         if (!$output || (stripos($output, 'E') === 0 && stripos($output, 'E160006') === false))
@@ -147,9 +147,10 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit, &$cache = [])
         {
             $revision = (string)$entry['revision'];
             $timestamp = strtotime((string)$entry->date);
+            $author = isset($entry->author) ? (string)$entry->author : 'unknown';
             if ($lastCommit && (int)$revision <= (int)$lastCommit)
                 continue;
-            $allRevisions[] = ['commit' => $revision, 'timestamp' => $timestamp];
+            $allRevisions[] = ['commit' => $revision, 'timestamp' => $timestamp, 'user' => $author];
         }
         usort($allRevisions, function($a, $b) {
             return (int)$a['commit'] - (int)$b['commit'];
@@ -436,12 +437,13 @@ function tryClaimCommit($projectId, $commit)
     {
         $commitHash = $commit['commit'];
         $timestamp = $commit['timestamp'];
+        $commitUser = isset($commit['user']) ? $commit['user'] : 'unknown';
         $stmt = $pdo->prepare("
             INSERT INTO `$commitsTable`
-            (project_id, commit_hash, commit_timestamp, processed_at)
-            VALUES (?, ?, FROM_UNIXTIME(?), NOW())
+            (project_id, commit_hash, commit_user, commit_timestamp, processed_at)
+            VALUES (?, ?, ?, FROM_UNIXTIME(?), NOW())
         ");
-        $stmt->execute([$projectId, $commitHash, $timestamp]);
+        $stmt->execute([$projectId, $commitHash, $commitUser, $timestamp]);
         return $pdo->lastInsertId();
     } 
     catch (PDOException $e) 
@@ -551,7 +553,7 @@ function findCommitWithoutStats($projectId)
     $commitsTable = $config['tables']['commits'] ?? 'commits';
     $statsTable = $config['tables']['statistics'] ?? 'statistics';
     $stmt = $pdo->prepare("
-        SELECT c.id, c.commit_hash as commit, UNIX_TIMESTAMP(c.commit_timestamp) as timestamp
+        SELECT c.id, c.commit_hash as commit, UNIX_TIMESTAMP(c.commit_timestamp) as timestamp, c.commit_user as user
         FROM `$commitsTable` c
         LEFT JOIN `$statsTable` s ON s.commit_id = c.id
         WHERE c.project_id = ?
@@ -565,7 +567,7 @@ function findCommitWithoutStats($projectId)
         return null;
     return [
         'id' => $row['id'],
-        'commit' => ['commit' => $row['commit'], 'timestamp' => $row['timestamp']]
+        'commit' => ['commit' => $row['commit'], 'timestamp' => $row['timestamp'], 'user' => $row['user']]
     ];
 }
 
