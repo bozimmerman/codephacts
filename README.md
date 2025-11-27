@@ -1,7 +1,7 @@
 # CodePhacts
 
-A comprehensive code statistics and project cost estimation tool that tracks lines of code, commits, 
-and generates industry-standard cost estimates across multiple programming languages.
+A code statistics and project cost estimation web app that tracks lines of code, languages, 
+commits, and generates fun cost estimates across multiple programming languages.
 
 ## Overview
 
@@ -14,7 +14,7 @@ industry-standard models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and 
 - **Multi-Language Support**: Analyzes 30+ programming languages including Java, C/C++, Python, JavaScript, PHP, Assembly, and more
 - **Repository Integration**: Direct integration with Git and SVN repositories
 - **Historical Tracking**: Tracks code evolution through commits over time
-- **Cost Estimation Models**: Five industry-standard estimation models with comparative analysis
+- **Cost Estimation Models**: Five estimation models with comparative analysis
 - **Visual Analytics**: Interactive charts showing code growth, composition, and commit activity
 - **Project Management**: Multi-project support with individual statistics and reporting
 - **Flexible Exclusions**: Configurable directory exclusions (e.g., `node_modules`, `vendor`)
@@ -167,7 +167,7 @@ php /path/to/codephacts/phactor.php
 
 ## Cost Estimation Models
 
-CodePhacts provides five industry-standard cost estimation models:
+CodePhacts provides five cost estimation models:
 
 ### 1. COCOMO (1981)
 Barry Boehm's Constructive Cost Model using empirical coefficients based on project complexity (organic, semi-detached, embedded).
