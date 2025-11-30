@@ -94,7 +94,7 @@ catch (PDOException $e)
         </div>
         <div class="card">
             <a href="projects.php?action=add" class="button">Add New Project</a>
-            <button onclick="if(confirm('Update all projects?')) window.location.href='run-update.php'" class="button secondary">Run Update</button>
+            <button onclick="if(confirm('Update all projects?')) window.location.href='run-update.php'" class="button primary">Run Update</button>
         </div>
         
         <div class="card">

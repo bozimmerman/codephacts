@@ -120,6 +120,14 @@ button.secondary:hover {
     background: #5a6268;
 }
 
+button.primary {
+    background: #6ffc03;
+}
+
+button.primary:hover {
+    background: #32a844;
+}
+
 button.danger {
     background: #dc3545;
 }
