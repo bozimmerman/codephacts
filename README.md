@@ -51,7 +51,13 @@ cost models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
       ],
        
        // How long to wait (in seconds) before reprocessing a commit
-       'stale_timeout' => 10000,
+       'stale_timeout' => 1000,
+       
+         // Languages to not count as 'code' for 'Code Line' counting.
+        "not_code_lines" => ["text", "xml", "json", "css", "html", "properties"],
+        
+         // Languages to not count as 'code' for 'Code Statement' counting.
+        "not_code_statements" => [],
        
        'tables' => [
            'projects'   => 'projects',
@@ -99,9 +105,23 @@ Update the database credentials in `config.php`:
 
 ### Stale Timeout
 
-The `stale_timeout` setting (in seconds) determines how long before a previously-processed commit can be reprocessed. Default is 10000 seconds (~2.8 hours):
+The `stale_timeout` setting (in seconds) determines how long before a previously-processed commit can be reprocessed.:
 ```php
-'stale_timeout' => 10000,
+'stale_timeout' => 1000,
+```
+
+### Not Code
+
+The `not_code_lines` setting is a list of languages (see the rules directory) that do not have their lines counted
+as "Code Lines".  They will still be counted as "Total Lines".
+```php
+"not_code_lines" => ["text", "xml", "json", "css", "html", "properties"],
+```
+
+The `not_code_statements` setting is a list of languages (see the rules directory) that do not have their statements
+counted as "Code Statements".
+```php
+"not_code_statements" => [],
 ```
 
 ## Usage

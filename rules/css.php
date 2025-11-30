@@ -52,10 +52,11 @@ return [
                 $stats['ncloc']++;
                 continue;
             }
+            $stats['code_lines']++;
             $stats['ncloc']++;
             $declarations = substr_count($line, ';');
             $stats['code_statements'] += $declarations;
-            //$stats['weighted_code_lines'] += $WEIGHT;
+            $stats['weighted_code_lines'] += $WEIGHT;
             $stats['weighted_code_statements'] += $declarations * $WEIGHT;
         }
         return $stats;

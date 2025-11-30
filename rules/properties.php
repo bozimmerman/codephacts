@@ -35,10 +35,10 @@ return [
                 $stats['comment_lines']++;
                 continue;
             }
-            //$stats['code_lines']++;
+            $stats['code_lines']++;
             $stats['ncloc']++;
             $stats['code_statements'] += 1;
-            //$stats['weighted_code_lines'] += 1.0;
+            $stats['weighted_code_lines'] += 1.0;
             $stats['weighted_code_statements'] += $WEIGHT;
         }
     }

@@ -37,12 +37,13 @@ return [
                 if (strlen(trim($sentence)) > 0)
                     $sentenceCount++;
             }
+            $stats['code_lines'] += 1;
             $stats['code_statements'] += $sentenceCount;
             $stats['weighted_code_statements'] += $sentenceCount;
         }
         $wrappedLines = (int)ceil($totalChars / 80);
         $stats['ncloc'] = $wrappedLines;
-        //$stats['weighted_code_lines'] = (float)$wrappedLines;
+        $stats['weighted_code_lines'] = (float)$wrappedLines;
         $stats['comment_lines'] = 0;
     }
 ];

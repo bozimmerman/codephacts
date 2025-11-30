@@ -30,11 +30,15 @@ return [
         'charset'  => 'utf8',          // Recommended charset
         'path'     => __DIR__ . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . 'codephacts.db', // sql lite path
     ],
-    'stale_timeout' => 10000,
+    'stale_timeout' => 1000,
     'server' => [
         'port' => 8088,
         'host' => 'localhost'
     ],
+    
+    "not_code_lines" => ["text", "xml", "json", "css", "html", "properties"],
+    "not_code_statements" => [],
+    
     'tables' => [
         'projects'      => 'projects',
         'statistics' => 'statistics',

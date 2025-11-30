@@ -29,7 +29,7 @@ return [
                 $stats['blank_lines']++;
                 continue;
             }
-            //$stats['code_lines']++;
+            $stats['code_lines']++;
             $stats['ncloc']++;
             $statements = 0;
             $statements += substr_count($trimmed, ',');
@@ -38,7 +38,7 @@ return [
             if (preg_match('/[a-zA-Z0-9]/', $trimmed))
                 $statements = max(1, $statements);
             $stats['code_statements'] += $statements;
-            //$stats['weighted_code_lines'] += $WEIGHT;
+            $stats['weighted_code_lines'] += $WEIGHT;
             $stats['weighted_code_statements'] += $statements * $WEIGHT;
             $stats['comment_lines'] += 0;
         }

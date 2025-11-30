@@ -46,13 +46,13 @@ return [
             }
             if (preg_match('/<[^>]+>/', $line)) 
             {
-                //$stats['code_lines']++;
+                $stats['code_lines']++;
                 $stats['ncloc']++;
                 $matches = [];
                 preg_match_all('/<(?!\/)([^>\/]+)(\/?)>/', $line, $matches);
                 $statements = count($matches[0]);
                 $stats['code_statements'] += $statements;
-                //$stats['weighted_code_lines'] += $WEIGHT;
+                $stats['weighted_code_lines'] += $WEIGHT;
                 $stats['weighted_code_statements'] += $statements * $WEIGHT;
             }
         }
