@@ -37,7 +37,7 @@ cost models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
 ```php
    return [
        // IMPORTANT: Change this password immediately!
-       'admin_password' => 'your-secure-password-here',
+       'admin_password' => 'put-your-admin-password-here---this-is-not-the-default',
        
       'db' => [
         'type'     => 'sqlite', // sqlite or mysql
@@ -205,15 +205,17 @@ CodePhacts analyzes 30+ programming languages:
 codephacts/
 ├── admin/              # Admin panel files
 │   ├── auth.php        # Authentication handler
-│   ├── login.php       # Login page
-│   ├── index.php       # Admin dashboard
-│   ├── projects.php    # Project management
 │   ├── edit-project.php # Project editor
-│   └── run-update.php  # Manual update trigger
+│   ├── index.php       # Admin dashboard
+│   ├── login.php       # Login page
+│   ├── logout.php      # Logout page
+│   ├── projects.php    # Project management
+│   └── run-update.php  # Manual update viewer
 ├── public/             # Public-facing pages
+│   ├── contributors.php# Contributors page
 │   ├── index.php       # Project listing
-│   ├── project.php     # Individual project view
 │   ├── languages.php   # Language statistics
+│   ├── project.php     # Individual project view
 │   ├── query.php       # Data query interface
 │   └── style.css       # Stylesheet
 ├── rules/              # Language analysis rules
