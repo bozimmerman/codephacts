@@ -25,6 +25,9 @@ while (ob_get_level()) {
 @ini_set('output_buffering', 'off');
 @ini_set('implicit_flush', 'on');
 ob_implicit_flush(true);
+@ini_set('zlib.output_compression', 0);
+@ini_set('implicit_flush', 1);
+header('Cache-Control: no-cache, no-store, must-revalidate');
 
 function outputProgress($type, $message, $data = []) 
 {
@@ -593,11 +596,13 @@ foreach ($ruleFiles as $ruleFile)
     }
 }
 
-function processCommitForProject($project, $commit, $commitId) 
+function processCommitForProject($project, $commit, $commitId, $current = 1, $total = 1) 
 {
     outputProgress('commit_start', "Processing commit: {$commit['commit']}", [
         'project' => $project['name'],
-        'commit' => $commit['commit']
+        'commit' => $commit['commit'],
+        'current' => $current,
+        'total' => $total
     ]);
     $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'cp_' . getmypid() . '_' . $project['id'] . '_' . substr($commit['commit'], 0, 8);
     mkdir($tempDir);
@@ -665,7 +670,7 @@ function findCommitWithoutStats($projectId)
     ];
 }
 
-function tryProcessNextCommitForProject($project, $stale_timeout, &$cache = [])
+function tryProcessNextCommitForProject($project, $stale_timeout, &$cache = [], $currentCommit = 1, $totalCommits = 1)
 {
     if (!canAccessRepo($project['source_type'], $project['source_url'],
         $project['auth_type'], $project['auth_username'], $project['auth_password'], $project['auth_ssh_key_path']))
@@ -679,7 +684,7 @@ function tryProcessNextCommitForProject($project, $stale_timeout, &$cache = [])
     {
         $orphanedCommit = findCommitWithoutStats($project['id']);
         if ($orphanedCommit)
-            return processCommitForProject($project, $orphanedCommit['commit'], $orphanedCommit['id']);
+            return processCommitForProject($project, $orphanedCommit['commit'], $orphanedCommit['id'], 1, 1);
         return false;
     }
     $commitId = tryClaimCommit($project['id'], $commit);
@@ -689,7 +694,7 @@ function tryProcessNextCommitForProject($project, $stale_timeout, &$cache = [])
         array_shift($cache[$project['source_url']]);
         return true; // There was work, just not for us - try again
     }
-    return processCommitForProject($project, $commit, $commitId);
+    return processCommitForProject($project, $commit, $commitId, $currentCommit, $totalCommits);
 }
 
 // Main processing loop
@@ -714,13 +719,18 @@ try
         ");
         $stmt->execute();
         $projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $totalCommits = 1;
+        $currentCommit = 0;
+        foreach ($projects as $project)
+            $totalCommits += (isset($cache[$project['source_url']]) ? count($cache[$project['source_url']]) : 0);
         foreach ($projects as $project) 
         {
             if (in_array($project['id'], $completedProjects))
                 continue;
+            $currentCommit += 1;
             try
             {
-                if (tryProcessNextCommitForProject($project, $config['stale_timeout'], $cache))
+                if (tryProcessNextCommitForProject($project, $config['stale_timeout'], $cache, $currentCommit, $totalCommits))
                     $workFound = true;
                 else
                     $completedProjects[] = $project['id'];

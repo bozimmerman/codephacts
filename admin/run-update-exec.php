@@ -18,34 +18,117 @@ $config = require_once 'auth.php';
 
 set_time_limit(0);
 ini_set('max_execution_time', 0);
+//@apache_setenv('no-gzip', 1);
+@ini_set('zlib.output_compression', 0);
+@ini_set('implicit_flush', 1);
+header('Cache-Control: no-cache, no-store, must-revalidate');
 
-header('Content-Type: application/json');
+// Set up Server-Sent Events headers
+header('Content-Type: text/event-stream');
+header('Cache-Control: no-cache');
+header('Connection: keep-alive');
+header('X-Accel-Buffering: no'); // Disable nginx buffering if present
+
+// Disable output buffering completely
+while (ob_get_level()) {
+    ob_end_clean();
+}
 
 $phactorPath = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'phactor.php';
 
-if (!file_exists($phactorPath)) 
+if (!file_exists($phactorPath))
 {
-    echo json_encode([
-        'success' => false,
-        'error' => 'phactor.php not found'
-    ]);
+    echo "data: " . json_encode([
+        'type' => 'error',
+        'message' => 'phactor.php not found'
+    ]) . "\n\n";
+    flush();
     exit;
 }
 
-/*
-$progressFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phactor_progress.json';
-file_put_contents($progressFile, json_encode([]));
-*/
+// Set up process with pipes
+$descriptorspec = [
+    0 => ['pipe', 'r'],  // stdin
+    1 => ['pipe', 'w'],  // stdout
+    2 => ['pipe', 'w']   // stderr
+];
 
-$command = "php -f " . escapeshellarg($phactorPath) . " 2>&1";
-$output = [];
-$returnVar = 0;
+$command = 'php ' . escapeshellarg($phactorPath) . ' 2>&1';
+$process = proc_open($command, $descriptorspec, $pipes);
 
-exec($command, $output, $returnVar); //this works, but hanhs
+if (!is_resource($process))
+{
+    echo "data: " . json_encode([
+        'type' => 'error',
+        'message' => 'Failed to start phactor.php'
+    ]) . "\n\n";
+    flush();
+    exit;
+}
 
+// Close stdin - we don't need it
+fclose($pipes[0]);
 
-echo json_encode([
-    'success' => ($returnVar === 0),
-    'output' => $output,
-    'return_code' => $returnVar
-]);
+// Set stdout to non-blocking so we can read it progressively
+stream_set_blocking($pipes[1], false);
+
+// Read output line by line and stream it back
+while (!feof($pipes[1]))
+{
+    $line = fgets($pipes[1]);
+    
+    if ($line !== false && trim($line) !== '')
+    {
+        // Send the line as an SSE message
+        echo "data: " . trim($line) . "\n\n";
+        flush();
+    }
+    
+    // Small sleep to prevent busy-waiting
+    usleep(100000); // 0.1 second
+    
+    // Check if process is still running
+    $status = proc_get_status($process);
+    if (!$status['running'])
+    {
+        break;
+    }
+}
+
+// Read any remaining output
+while (!feof($pipes[1]))
+{
+    $line = fgets($pipes[1]);
+    if ($line !== false && trim($line) !== '')
+    {
+        echo "data: " . trim($line) . "\n\n";
+        flush();
+    }
+}
+
+// Read stderr if there's anything there
+$errors = stream_get_contents($pipes[2]);
+
+// Close pipes
+fclose($pipes[1]);
+fclose($pipes[2]);
+
+// Get exit code
+$returnCode = proc_close($process);
+
+// Send completion message
+echo "data: " . json_encode([
+    'type' => 'complete',
+    'return_code' => $returnCode,
+    'success' => ($returnCode === 0)
+]) . "\n\n";
+
+if ($errors)
+{
+    echo "data: " . json_encode([
+        'type' => 'error',
+        'message' => $errors
+    ]) . "\n\n";
+}
+
+flush();

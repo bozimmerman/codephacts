@@ -32,7 +32,6 @@ $phactorPath = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'pha
             border-radius: 4px;
             overflow: hidden;
             margin: 20px 0;
-            display: none;
         }
         
         .progress-bar-fill {
@@ -151,109 +150,118 @@ $phactorPath = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'pha
             status.textContent = text;
         }
         
-        setTimeout(function() 
-        {
-            updateProgress(10, '1%');
-            //updateStatus('Updating all projects...');
-            updateStatus('=== CodePhacts Update Process ===');
-            addOutput('Started at: ' + new Date().toLocaleString());
-            addOutput('');
-            addOutput('The dashboard will return when the progress completes.');
-            fetch('run-update-exec.php')
-            .then(response => response.json())
-            .then(data => {
-                if (!data.success) {
-                    addOutput('ERROR: ' + data.error, 'error');
-                    spinner.style.display = 'none';
-                    completedActions.style.display = 'block';
-                }
-                document.location.href='projects.php?'+new Date().toLocaleString();
-                //addOutput('Update process started');
-            });
+        // Initialize
+        updateProgress(0, '0%');
+        addOutput('=== CodePhacts Update Process ===');
+        addOutput('Started at: ' + new Date().toLocaleString());
+        addOutput('');
+        addOutput('Waiting for updates from phactor.php...');
+        addOutput('');
+        
+        let currentProgress = 0;
+        let totalCommits = 0;
+        let processedCommits = 0;
+        
+        // Create EventSource for Server-Sent Events
+        const eventSource = new EventSource('run-update-exec.php');
+        
+        eventSource.onmessage = function(event) {
+            try {
+                console.info(event.data);
+                const data = JSON.parse(event.data);
+                
+                switch(data.type) {
+                    case 'project_start':
+                        addOutput('→ Starting: ' + data.message);
+                        updateStatus(data.message);
+                        break;
                         
-            let lastProgressCount = 0;
-            /*
-            let pollInterval = setInterval(function() {
-                fetch('get-progress.php')
-                    .then(response => response.json())
-                    .then(result => {
-                        if (result.success && result.progress) {
-                            for (let i = lastProgressCount; i < result.progress.length; i++) {
-                                eventSource.onmessage({data: JSON.stringify(result.progress[i])});
-                            }
-                            lastProgressCount = result.progress.length;
+                    case 'project_skip':
+                        addOutput('  ✗ ' + data.message);
+                        break;
+                        
+                    case 'commits_found':
+                        addOutput('  ✓ ' + data.message, 'success');
+                        break;
+                        
+                    case 'commit_start':
+                        addOutput('    • Processing: ' + data.message);
+                        if (data.data && data.data.total > 0) {
+                            processedCommits = data.data.current;
+                            totalCommits = data.data.total;
+                            currentProgress = 0 + Math.floor((processedCommits / totalCommits) * 100);
+                            updateProgress(currentProgress, currentProgress + '%');
                         }
-                    });
-            }, 1000);
-            */
-            let currentProgress = 10;
-            
-            let eventSource = { onmessage: function(event) {
-                try {
-                    const data = JSON.parse(event.data);
-                    
-                    switch(data.type) {
-                        case 'project_start':
-                            addOutput('! Starting: ' + data.message);
-                            updateStatus(data.message);
-                            break;
-                            
-                        case 'project_skip':
-                            addOutput('  X ' + data.message);
-                            break;
-                            
-                        case 'commits_found':
-                            addOutput('  ! ' + data.message, 'success');
-                            break;
-                            
-                        case 'commit_start':
-                            addOutput('    Processing: ' + data.message);
-                            if (data.data && data.data.total > 0) {
-                                currentProgress = 10 + Math.floor((data.data.current / data.data.total) * 80);
-                                updateProgress(currentProgress, currentProgress + '%');
-                            }
-                            updateStatus(data.message);
-                            break;
-                            
-                        case 'commit_complete':
-                            addOutput('    ! ' + data.message, 'success');
-                            break;
-                            
-                        case 'project_complete':
-                            addOutput('! ' + data.message, 'success');
+                        updateStatus(data.message);
+                        break;
+                        
+                    case 'commit_complete':
+                        addOutput('    ✓ ' + data.message, 'success');
+                        break;
+                        
+                    case 'project_complete':
+                        addOutput('✓ ' + data.message, 'success');
+                        addOutput('');
+                        break;
+                        
+                    case 'error':
+                        addOutput('✗ ERROR: ' + data.message, 'error');
+                        break;
+                        
+                    case 'all_complete':
+                        addOutput('');
+                        addOutput('=== ' + data.message.toUpperCase() + ' ===', 'success');
+                        updateProgress(100, 'Complete!');
+                        updateStatus('All updates completed!');
+                        spinner.style.display = 'none';
+                        completedActions.style.display = 'block';
+                        eventSource.close();
+                        break;
+                        
+                    case 'complete':
+                        if (data.return_code !== 0) {
+                            addOutput('✗ Process exited with code: ' + data.return_code, 'error');
+                            updateStatus('Update failed!');
+                        } else {
                             addOutput('');
-                            break;
-                            
-                        case 'error':
-                            addOutput('X ERROR: ' + data.message, 'error');
-                            break;
-                            
-                        case 'all_complete':
-                            addOutput('');
-                            addOutput('=== ' + data.message.toUpperCase() + ' ===', 'success');
+                            addOutput('=== UPDATE COMPLETE ===', 'success');
                             updateProgress(100, 'Complete!');
                             updateStatus('All updates completed!');
-                            spinner.style.display = 'none';
-                            completedActions.style.display = 'block';
-                            eventSource.close();
-                            break;
-                            
-                        case 'complete':
-                            if (data.return_code !== 0) {
-                                addOutput('X Process exited with code: ' + data.return_code, 'error');
-                                updateStatus('Update failed!');
-                            }
-                            spinner.style.display = 'none';
-                            completedActions.style.display = 'block';
-                            eventSource.close();
-                            break;
-                    }
-                } catch (e) {
-                    // Not JSON, treat as raw output
+                        }
+                        spinner.style.display = 'none';
+                        completedActions.style.display = 'block';
+                        eventSource.close();
+                        break;
+                        
+                    case 'loop_start':
+                        addOutput('--- ' + data.message + ' ---');
+                        break;
+                        
+                    default:
+                        // Unknown message type, just log it
+                        console.log('Unknown message:', data);
+                }
+            } catch (e) {
+                // If it's not JSON, it might be raw output - just display it
+                if (event.data && event.data.trim() !== '') {
                     addOutput(event.data);
                 }
-            }};
-        }, 500);
-   </script>
+            }
+        };
+        
+        eventSource.onerror = function(error) {
+            console.error('EventSource error:', error);
+            addOutput('');
+            addOutput('✗ Connection error or process ended', 'error');
+            spinner.style.display = 'none';
+            completedActions.style.display = 'block';
+            eventSource.close();
+        };
+        
+        // Handle page unload
+        window.addEventListener('beforeunload', function() {
+            eventSource.close();
+        });
+    </script>
 </body>
 </html>
