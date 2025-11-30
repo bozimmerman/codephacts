@@ -19,6 +19,14 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '/db.p
 
 $projectId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
+// Load metrics configuration and determine selected metric
+$statsColumnsMap = require __DIR__ . DIRECTORY_SEPARATOR . 'stats_columns_map.php';
+$selectedMetric = isset($_GET['metric']) ? $_GET['metric'] : 'total_lines';
+if (!isset($statsColumnsMap[$selectedMetric]))
+    $selectedMetric = 'total_lines';
+$metricConfig = $statsColumnsMap[$selectedMetric];
+$metricColumn = $metricConfig['column'];
+
 try
 {
     $pdo = getDatabase($config);
@@ -28,41 +36,72 @@ try
     
     if (!$project)
         die("Project not found");
-    $stmt = $pdo->prepare("
-    SELECT
-        s.language,
-        s.total_lines,
-        s.code_lines,
-        s.comment_lines,
-        s.blank_lines
-    FROM {$config['tables']['statistics']} s
-    INNER JOIN (
-        SELECT MAX(commit_id) as max_commit_id
-        FROM {$config['tables']['statistics']}
-        WHERE project_id = ?
-    ) latest ON s.commit_id = latest.max_commit_id
-    WHERE s.project_id = ?
-    ORDER BY s.code_lines DESC
-    ");
+        
+    if ($selectedMetric === 'total_lines') 
+    {
+        $stmt = $pdo->prepare("
+        SELECT
+            s.language,
+            s.total_lines,
+            s.code_lines,
+            s.comment_lines,
+            s.blank_lines
+        FROM {$config['tables']['statistics']} s
+        INNER JOIN (
+            SELECT MAX(commit_id) as max_commit_id
+            FROM {$config['tables']['statistics']}
+            WHERE project_id = ?
+        ) latest ON s.commit_id = latest.max_commit_id
+        WHERE s.project_id = ?
+        ORDER BY s.total_lines DESC
+        ");
+    } 
+    else 
+    {
+        $stmt = $pdo->prepare("
+        SELECT
+            s.language,
+            s.total_lines,
+            s.{$metricColumn} as metric_value,
+            s.comment_lines,
+            s.blank_lines
+        FROM {$config['tables']['statistics']} s
+        INNER JOIN (
+            SELECT MAX(commit_id) as max_commit_id
+            FROM {$config['tables']['statistics']}
+            WHERE project_id = ?
+        ) latest ON s.commit_id = latest.max_commit_id
+        WHERE s.project_id = ?
+        ORDER BY s.{$metricColumn} DESC
+        ");
+    }
     $stmt->execute([$projectId, $projectId]);
     $languages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
     $totals = [
         'total_lines' => 0,
         'code_lines' => 0,
+        'metric_value' => 0,
         'comment_lines' => 0,
         'blank_lines' => 0
     ];
-    foreach ($languages as $lang) {
+    
+    foreach ($languages as $lang) 
+    {
         $totals['total_lines'] += $lang['total_lines'];
-        $totals['code_lines'] += $lang['code_lines'];
         $totals['comment_lines'] += $lang['comment_lines'];
         $totals['blank_lines'] += $lang['blank_lines'];
+        if ($selectedMetric === 'total_lines')
+            $totals['code_lines'] += $lang['code_lines'];
+        else
+            $totals['metric_value'] += $lang['metric_value'];
     }
+    
     $stmt = $pdo->prepare("
     SELECT
         c.commit_hash,
         c.commit_timestamp,
-        SUM(s.code_lines) as total_code_lines
+        SUM(s.{$metricColumn}) as metric_value
     FROM {$config['tables']['commits']} c
     INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
     WHERE c.project_id = ?
@@ -71,11 +110,11 @@ try
     ");
     $stmt->execute([$projectId]);
     $allCommits = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
     $commitPage = isset($_GET['commit_page']) ? max(1, (int)$_GET['commit_page']) : 1;
     $commitsPerPage = 20;
     $commitOffset = ($commitPage - 1) * $commitsPerPage;
     
-    // Get total commit count for pagination
     $commitCountStmt = $pdo->prepare("
     SELECT COUNT(*)
     FROM {$config['tables']['commits']} c
@@ -85,12 +124,13 @@ try
     $commitCountStmt->execute([$projectId]);
     $totalCommits = $commitCountStmt->fetchColumn();
     $totalCommitPages = ceil($totalCommits / $commitsPerPage);
+    
     $stmt = $pdo->prepare("
     SELECT
         c.commit_hash,
         c.commit_timestamp,
         c.commit_user,
-        SUM(s.code_lines) as total_code_lines
+        SUM(s.{$metricColumn}) as metric_value
     FROM {$config['tables']['commits']} c
     LEFT JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
     WHERE c.project_id = ?
@@ -110,84 +150,80 @@ function determineOptimalGrouping($commits, $targetDataPoints = 100)
 {
     if (empty($commits) || count($commits) <= 1)
         return ['interval' => 'day', 'intervalDays' => 1];
-        $firstCommit = strtotime($commits[0]['commit_timestamp']);
-        $lastCommit = strtotime($commits[count($commits) - 1]['commit_timestamp']);
-        $totalDays = ceil(($lastCommit - $firstCommit) / 86400);
-        if ($totalDays <= $targetDataPoints)
-            return ['interval' => 'day', 'intervalDays' => 1];
-            $intervals = [
-                ['interval' => 'day', 'intervalDays' => 1],
-                ['interval' => '3 days', 'intervalDays' => 3],
-                ['interval' => 'week', 'intervalDays' => 7],
-                ['interval' => '2 weeks', 'intervalDays' => 14],
-                ['interval' => 'month', 'intervalDays' => 30],
-                ['interval' => 'quarter', 'intervalDays' => 90],
-                ['interval' => 'year', 'intervalDays' => 365]
-            ];
-            $bestInterval = $intervals[0];
-            $bestDifference = abs($targetDataPoints - ($totalDays / $intervals[0]['intervalDays']));
-            foreach ($intervals as $interval)
+    $firstCommit = strtotime($commits[0]['commit_timestamp']);
+    $lastCommit = strtotime($commits[count($commits) - 1]['commit_timestamp']);
+    $totalDays = ceil(($lastCommit - $firstCommit) / 86400);
+    if ($totalDays <= $targetDataPoints)
+        return ['interval' => 'day', 'intervalDays' => 1];
+    $intervals = [
+        ['interval' => 'day', 'intervalDays' => 1],
+        ['interval' => '3 days', 'intervalDays' => 3],
+        ['interval' => 'week', 'intervalDays' => 7],
+        ['interval' => '2 weeks', 'intervalDays' => 14],
+        ['interval' => 'month', 'intervalDays' => 30],
+        ['interval' => 'quarter', 'intervalDays' => 90],
+        ['interval' => 'year', 'intervalDays' => 365]
+    ];
+    $bestInterval = $intervals[0];
+    $bestDifference = abs($targetDataPoints - ($totalDays / $intervals[0]['intervalDays']));
+    foreach ($intervals as $interval)
+    {
+        $resultingPoints = $totalDays / $interval['intervalDays'];
+        $difference = abs($targetDataPoints - $resultingPoints);
+        if ($resultingPoints >= 50 && $resultingPoints <= 150)
+        {
+            if ($difference < $bestDifference)
             {
-                $resultingPoints = $totalDays / $interval['intervalDays'];
-                $difference = abs($targetDataPoints - $resultingPoints);
-                if ($resultingPoints >= 50 && $resultingPoints <= 150)
-                {
-                    if ($difference < $bestDifference)
-                    {
-                        $bestInterval = $interval;
-                        $bestDifference = $difference;
-                    }
-                }
+                $bestInterval = $interval;
+                $bestDifference = $difference;
             }
-            return $bestInterval;
+        }
+    }
+    return $bestInterval;
 }
 
 function groupCommitsByInterval($commits, $intervalDays)
 {
     if (empty($commits))
         return ['labels' => [], 'changes' => []];
-        $groupedData = [];
-        foreach ($commits as $commit)
+    $groupedData = [];
+    foreach ($commits as $commit)
+    {
+        if (!$commit['metric_value'] || $commit['metric_value'] === null)
+            continue;
+        $date = new DateTime($commit['commit_timestamp']);
+        $timestamp = $date->getTimestamp();
+        $bucketKey = floor($timestamp / ($intervalDays * 86400)) * ($intervalDays * 86400);
+        $metricValue = (int)$commit['metric_value'];
+        if (!isset($groupedData[$bucketKey]))
         {
-            if (!$commit['total_code_lines'] || $commit['total_code_lines'] === null)
-                continue;
-                $date = new DateTime($commit['commit_timestamp']);
-                $timestamp = $date->getTimestamp();
-                $bucketKey = floor($timestamp / ($intervalDays * 86400)) * ($intervalDays * 86400);
-                $codeLines = (int)$commit['total_code_lines'];
-                if (!isset($groupedData[$bucketKey]))
-                {
-                    $groupedData[$bucketKey] = [
-                        'commits' => [],
-                        'codeLines' => []
-                    ];
-                }
-                $groupedData[$bucketKey]['commits'][] = $commit;
-                $groupedData[$bucketKey]['codeLines'][] = $codeLines;
+            $groupedData[$bucketKey] = [
+                'commits' => [],
+                'metricValues' => []
+            ];
         }
-        ksort($groupedData);
-        $labels = [];
-        $changes = [];
-        $previousAvg = null;
-        
-        foreach ($groupedData as $bucketKey => $data)
-        {
-            $date = new DateTime();
-            $date->setTimestamp($bucketKey);
-            $labels[] = $date->format('Y-m-d');
-            $currentAvg = array_sum($data['codeLines']) / count($data['codeLines']);
-            if ($previousAvg === null)
-                $changes[] = 0;
-                else
-                    $changes[] = round($currentAvg - $previousAvg);
-                    $previousAvg = $currentAvg;
-        }
-        return ['labels' => $labels, 'changes' => $changes];
+        $groupedData[$bucketKey]['commits'][] = $commit;
+        $groupedData[$bucketKey]['metricValues'][] = $metricValue;
+    }
+    ksort($groupedData);
+    $labels = [];
+    $changes = [];
+    $previousAvg = null;
+    
+    foreach ($groupedData as $bucketKey => $data)
+    {
+        $date = new DateTime();
+        $date->setTimestamp($bucketKey);
+        $labels[] = $date->format('Y-m-d');
+        $currentAvg = array_sum($data['metricValues']) / count($data['metricValues']);
+        if ($previousAvg === null)
+            $changes[] = 0;
+        else
+            $changes[] = round($currentAvg - $previousAvg);
+        $previousAvg = $currentAvg;
+    }
+    return ['labels' => $labels, 'changes' => $changes];
 }
-
-// ============================================================================
-// ESTIMATION MODELS
-// ============================================================================
 
 /**
  * Calculate Basic COCOMO estimates
@@ -206,29 +242,21 @@ function calculateCOCOMO($kloc, $mode = 'semi-detached')
     if (!isset($coefficients[$mode]))
         $mode = 'semi-detached';
         
-        $coef = $coefficients[$mode];
-        $effort = $coef['a'] * pow($kloc, $coef['b']);
-        $time = $coef['c'] * pow($effort, $coef['d']);
-        $people = $effort / $time;
-        
-        return [
-            'effort' => $effort,
-            'time' => $time,
-            'people' => $people,
-            'mode' => $mode
-        ];
+    $coef = $coefficients[$mode];
+    $effort = $coef['a'] * pow($kloc, $coef['b']);
+    $time = $coef['c'] * pow($effort, $coef['d']);
+    $people = $effort / $time;
+    
+    return [
+        'effort' => $effort,
+        'time' => $time,
+        'people' => $people,
+        'mode' => $mode
+    ];
 }
 
-/**
- * Calculate COCOMO II estimates (Post-Architecture model)
- * @param int $kloc Thousands of lines of code
- * @param array $scaleFactors Scale factors (PREC, FLEX, RESL, TEAM, PMAT) each 0-5
- * @param array $effortMultipliers 17 cost drivers, each 0.5-2.0
- * @return array Effort and time estimates
- */
 function calculateCOCOMO2($kloc, $scaleFactors = null, $effortMultipliers = null)
 {
-    // Default scale factors (nominal = 3.0 each)
     if ($scaleFactors === null) {
         $scaleFactors = [
             'PREC' => 3.0,  // Precedentedness
@@ -238,30 +266,18 @@ function calculateCOCOMO2($kloc, $scaleFactors = null, $effortMultipliers = null
             'PMAT' => 3.0   // Process Maturity
         ];
     }
-    
-    // Calculate exponent (B)
     $B = 0.91 + 0.01 * array_sum($scaleFactors);
-    
-    // Base constant
     $A = 2.94;
-    
-    // Calculate base effort
     $effort = $A * pow($kloc, $B);
-    
-    // Apply effort multipliers if provided (all nominal = 1.0)
-    if ($effortMultipliers !== null) {
-        foreach ($effortMultipliers as $em) {
+    if ($effortMultipliers !== null) 
+    {
+        foreach ($effortMultipliers as $em)
             $effort *= $em;
-        }
     }
-    
-    // Calculate time
     $C = 3.67;
     $D = 0.28 + 0.2 * ($B - 0.91);
     $time = $C * pow($effort, $D);
-    
     $people = $effort / $time;
-    
     return [
         'effort' => $effort,
         'time' => $time,
@@ -270,16 +286,8 @@ function calculateCOCOMO2($kloc, $scaleFactors = null, $effortMultipliers = null
     ];
 }
 
-/**
- * Estimate Function Points from LOC
- * Simple conversion based on language
- * @param int $loc Lines of code
- * @param string $language Programming language
- * @return array Function points and estimates
- */
 function calculateFunctionPoints($loc, $language = 'PHP')
 {
-    // Average LOC per function point by language (industry averages)
     $locPerFP = [
         'Assembly' => 320,
         'C' => 128,
@@ -299,11 +307,8 @@ function calculateFunctionPoints($loc, $language = 'PHP')
     $ratio = isset($locPerFP[$language]) ? $locPerFP[$language] : $locPerFP['Default'];
     $functionPoints = $loc / $ratio;
     
-    // Estimate effort: typically 5-10 hours per function point
     $hoursPerFP = 7.5; // median
-    $effort = ($functionPoints * $hoursPerFP) / 160; // Convert to person-months
-    
-    // Estimate time using simplified model
+    $effort = ($functionPoints * $hoursPerFP) / 160;
     $time = 2.5 * pow($effort, 0.38);
     $people = $effort / $time;
     
@@ -317,34 +322,23 @@ function calculateFunctionPoints($loc, $language = 'PHP')
     ];
 }
 
-/**
- * Calculate SLIM (Putnam) model estimates
- * @param int $loc Lines of code
- * @param int $productivity Productivity parameter (typically 2000-12000)
- * @return array Effort and time estimates
- */
 function calculateSLIM($loc, $productivity = 5000)
 {
     $kloc = $loc / 1000;
-    $effort = 3.0 * pow($kloc, 1.12); // Initial COCOMO estimate
-    
-    // Iterate to solve the implicit equation
-    for ($i = 0; $i < 10; $i++) {
+    $effort = 3.0 * pow($kloc, 1.12);
+    for ($i = 0; $i < 10; $i++) 
+    {
         $time = pow($loc / ($productivity * pow($effort, 1/3)), 0.75);
         $newEffort = pow($loc / ($productivity * pow($time, 4/3)), 3);
-        
-        if (abs($newEffort - $effort) < 0.01) {
+        if (abs($newEffort - $effort) < 0.01) 
+        {
             $effort = $newEffort;
             break;
         }
-        
         $effort = ($effort + $newEffort) / 2;
     }
-    
-    // Final time calculation
     $time = pow($loc / ($productivity * pow($effort, 1/3)), 0.75);
     $people = $effort / $time;
-    
     return [
         'effort' => $effort,
         'time' => $time,
@@ -353,36 +347,17 @@ function calculateSLIM($loc, $productivity = 5000)
     ];
 }
 
-/**
- * Calculate Putnam model estimates (alternative formulation)
- * @param int $loc Lines of code
- * @param float $technology Technology constant (2000-12000, default 8000)
- * @return array Effort and time estimates
- */
 function calculatePutnam($loc, $technology = 8000)
 {
-    // Putnam model: Size = C_k × K^(1/3) × t_d^(4/3)
-    // Where: Size = KLOC, K = effort (person-years), t_d = time (years), C_k = technology constant
-    
     $kloc = $loc / 1000;
-    
-    // Minimum development time (years): t_min = k_1 × KLOC^k_2
-    $k1 = 0.15; // typical value
-    $k2 = 0.4;  // typical value
+    $k1 = 0.15;
+    $k2 = 0.4;
     $tMin = $k1 * pow($kloc, $k2);
-    
-    // Use 1.2x minimum time for realistic schedule
     $time = $tMin * 1.2;
-    
-    // Calculate effort: K = (Size / (C_k × t_d^(4/3)))^3
     $effort = pow($kloc / ($technology / 1000 * pow($time, 4/3)), 3);
-    
-    // Convert years to months
     $timeMonths = $time * 12;
     $effortMonths = $effort * 12;
-    
     $people = $effortMonths / $timeMonths;
-    
     return [
         'effort' => $effortMonths,
         'time' => $timeMonths,
@@ -392,17 +367,9 @@ function calculatePutnam($loc, $technology = 8000)
     ];
 }
 
-/**
- * Generate comprehensive project estimates
- * @param int $loc Lines of code
- * @param string $primaryLanguage Primary programming language
- * @param string $cocomoMode COCOMO mode
- * @return array All estimation results
- */
 function generateEstimates($loc, $primaryLanguage = 'PHP', $cocomoMode = 'semi-detached')
 {
     $kloc = $loc / 1000;
-    
     return [
         'cocomo' => calculateCOCOMO($kloc, $cocomoMode),
         'cocomo2' => calculateCOCOMO2($kloc),
@@ -412,14 +379,11 @@ function generateEstimates($loc, $primaryLanguage = 'PHP', $cocomoMode = 'semi-d
     ];
 }
 
-// Generate estimates for this project
 $primaryLanguage = !empty($languages) ? $languages[0]['language'] : 'PHP';
-$estimates = generateEstimates($totals['code_lines'], $primaryLanguage);
-
-// Calculate costs (configurable hourly rate)
+$estimateBase = $selectedMetric === 'total_lines' ? $totals['code_lines'] : $totals['metric_value'];
+$estimates = generateEstimates($estimateBase, $primaryLanguage);
 $hourlyRate = 75; // USD per hour
 $hoursPerMonth = 160; // Standard work month
-
 $grouping = determineOptimalGrouping($allCommits);
 $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
 ?>
@@ -521,6 +485,24 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         </div>
 
         <div class="card">
+            <h2>📊 View Metrics</h2>
+            <form method="GET" style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                <input type="hidden" name="id" value="<?= $projectId ?>">
+                <label for="metric" style="margin: 0; font-weight: bold;">Select Metric:</label>
+                <select name="metric" id="metric" onchange="this.form.submit()" style="width: auto; margin: 0;">
+                    <?php foreach ($statsColumnsMap as $key => $config): ?>
+                        <option value="<?= $key ?>" <?= $selectedMetric === $key ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($config['label']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <span style="color: #6c757d; font-size: 0.9em;">
+                    <?= htmlspecialchars($metricConfig['description']) ?>
+                </span>
+            </form>
+        </div>
+
+        <div class="card">
             <h2>Language Breakdown</h2>
             <?php if (empty($languages)): ?>
                 <p>No statistics available yet.</p>
@@ -530,7 +512,11 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                         <tr>
                             <th>Language</th>
                             <th>Total Lines</th>
-                            <th>Code Lines</th>
+                            <?php if ($selectedMetric === 'total_lines'): ?>
+                                <th>Code Lines</th>
+                            <?php else: ?>
+                                <th><?= htmlspecialchars($metricConfig['label']) ?></th>
+                            <?php endif; ?>
                             <th>Comment Lines</th>
                             <th>Blank Lines</th>
                             <th>Percentage</th>
@@ -541,16 +527,28 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                             <tr>
                                 <td><strong><?= htmlspecialchars($lang['language']) ?></strong></td>
                                 <td><?= number_format($lang['total_lines'] ?? 0) ?></td>
-                                <td><?= number_format($lang['code_lines'] ?? 0) ?></td>
+                                <?php if ($selectedMetric === 'total_lines'): ?>
+                                    <td><?= number_format($lang['code_lines'] ?? 0) ?></td>
+                                <?php else: ?>
+                                    <td><?= number_format($lang['metric_value'] ?? 0) ?></td>
+                                <?php endif; ?>
                                 <td><?= number_format($lang['comment_lines'] ?? 0) ?></td>
                                 <td><?= number_format($lang['blank_lines'] ?? 0) ?></td>
-                                <td><?= $totals['code_lines'] > 0 ? number_format(($lang['code_lines'] / $totals['code_lines']) * 100, 1) : '0.0' ?>%</td>
+                                <?php 
+                                $percentageBase = $selectedMetric === 'total_lines' ? $totals['code_lines'] : $totals['metric_value'];
+                                $langValue = $selectedMetric === 'total_lines' ? $lang['code_lines'] : $lang['metric_value'];
+                                ?>
+                                <td><?= $percentageBase > 0 ? number_format(($langValue / $percentageBase) * 100, 1) : '0.0' ?>%</td>
                             </tr>
                         <?php endforeach; ?>
                         <tr style="font-weight: bold; border-top: 2px solid #dee2e6;">
                             <td>Total</td>
                             <td><?= number_format($totals['total_lines'] ?? 0) ?></td>
-                            <td><?= number_format($totals['code_lines'] ?? 0) ?></td>
+                            <?php if ($selectedMetric === 'total_lines'): ?>
+                                <td><?= number_format($totals['code_lines'] ?? 0) ?></td>
+                            <?php else: ?>
+                                <td><?= number_format($totals['metric_value'] ?? 0) ?></td>
+                            <?php endif; ?>
                             <td><?= number_format($totals['comment_lines'] ?? 0) ?></td>
                             <td><?= number_format($totals['blank_lines'] ?? 0) ?></td>
                             <td>100.0%</td>
@@ -559,15 +557,16 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                 </table>
             <?php endif; ?>
         </div>
+        
         <?php if (!empty($allCommits) && count($allCommits) > 1): ?>
         <div class="card">
-            <h2>Lines of Code Over Time</h2>
+            <h2><?= htmlspecialchars($metricConfig['chartTitle']) ?> - Changes Per Interval</h2>
             <div class="chart-container" style="height: 300px;">
                 <canvas id="codeHistoryChart"></canvas>
             </div>
         </div>
         <div class="card">
-            <h2>Total Lines of Code Growth</h2>
+            <h2><?= htmlspecialchars($metricConfig['chartTitle']) ?> - Growth</h2>
             <div class="chart-container" style="height: 300px;">
                 <canvas id="totalLinesChart"></canvas>
             </div>
@@ -587,10 +586,10 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         </div>
         <?php endif; ?>
 
-        <?php if ($totals['code_lines'] > 0): ?>
+        <?php if ($estimateBase > 0): ?>
         <div class="card">
             <h2>📊 Project Cost Estimation Models</h2>
-            <p>Based on <strong><?= number_format($totals['code_lines']) ?></strong> lines of code (<?= number_format($totals['code_lines'] / 1000, 1) ?> KLOC)</p>
+            <p>Based on <strong><?= number_format($estimateBase) ?></strong> <?= $selectedMetric === 'total_lines' ? 'lines of code' : htmlspecialchars(strtolower($metricConfig['label'])) ?> (<?= number_format($estimateBase / 1000, 1) ?> K)</p>
             
             <div class="estimate-grid">
                 <!-- COCOMO -->
@@ -673,7 +672,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                         <span class="metric-value">$<?= number_format($estimates['functionPoints']['effort'] * $hoursPerMonth * $hourlyRate, 0) ?></span>
                     </div>
                     <div class="metric">
-                        <span class="metric-label">Language:</span>
+                        <span class="metric-label">Primary Language:</span>
                         <span class="metric-value"><?= $estimates['functionPoints']['language'] ?></span>
                     </div>
                     <div class="model-description">
@@ -841,7 +840,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                             <th>Commit</th>
                             <th>User</th>
                             <th>Date</th>
-                            <th>Total Code Lines</th>
+                            <th><?= htmlspecialchars($metricConfig['label']) ?></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -850,7 +849,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                                 <td><?= htmlspecialchars(substr($commit['commit_hash'], 0, 10)) ?></td>
                                 <td><?= htmlspecialchars($commit['commit_user'] ?? 'None') ?></td>
                                 <td><?= htmlspecialchars($commit['commit_timestamp']) ?></td>
-                                <td><?= number_format($commit['total_code_lines'] ?? 0) ?></td>
+                                <td><?= number_format($commit['metric_value'] ?? 0) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -858,7 +857,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                 <?php if ($totalCommitPages > 1): ?>
                     <div style="margin-top: 20px; text-align: center;">
                         <?php if ($commitPage > 1): ?>
-                            <a href="?id=<?= $projectId ?>&commit_page=<?= $commitPage - 1 ?>" class="button">← Previous</a>
+                            <a href="?id=<?= $projectId ?>&metric=<?= $selectedMetric ?>&commit_page=<?= $commitPage - 1 ?>" class="button">← Previous</a>
                         <?php endif; ?>
                         
                         <span style="margin: 0 15px; color: #6c757d;">
@@ -866,7 +865,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                         </span>
                         
                         <?php if ($commitPage < $totalCommitPages): ?>
-                            <a href="?id=<?= $projectId ?>&commit_page=<?= $commitPage + 1 ?>" class="button">Next →</a>
+                            <a href="?id=<?= $projectId ?>&metric=<?= $selectedMetric ?>&commit_page=<?= $commitPage + 1 ?>" class="button">Next →</a>
                         <?php endif; ?>
                     </div>
                 <?php endif; ?>
@@ -892,7 +891,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         data: {
             labels: commitData.labels.map(d => new Date(d).toLocaleDateString()),
             datasets: [{
-                label: `Average Lines Added/Removed per ${commitData.interval}`,
+                label: `Average Change per ${commitData.interval}`,
                 data: commitData.changes.map(v => v >= 0 ? Math.sqrt(v) : -Math.sqrt(Math.abs(v))),
                 backgroundColor: commitData.changes.map(v => v >= 0 ? 'rgba(40, 167, 69, 0.7)' : 'rgba(220, 53, 69, 0.7)'),
                 borderColor: commitData.changes.map(v => v >= 0 ? '#28a745' : '#dc3545'),
@@ -907,7 +906,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                     beginAtZero: true,
                     title: {
                         display: true,
-                        text: 'Average Lines Changed (sqrt scale)'
+                        text: '<?= htmlspecialchars($metricConfig['yAxisLabel']) ?> Changed (sqrt scale)'
                     },
                     ticks: {
                         callback: function(value) {
@@ -937,7 +936,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                             const realValue = transformedValue >= 0 
                                 ? Math.pow(transformedValue, 2) 
                                 : -Math.pow(Math.abs(transformedValue), 2);
-                            return 'Avg change: ' + (realValue >= 0 ? '+' + Math.round(realValue) : Math.round(realValue)) + ' lines';
+                            return 'Avg change: ' + (realValue >= 0 ? '+' + Math.round(realValue) : Math.round(realValue));
                         }
                     }
                 }
@@ -945,8 +944,8 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         }
     });
 
- // Commit Activity Chart (using the same grouping as code history)
-    function groupCommitActivity(commits, intervalDays) {
+    function groupCommitActivity(commits, intervalDays) 
+    {
         const grouped = {};
         commits.forEach(c => {
             const date = new Date(c.commit_timestamp);
@@ -1020,15 +1019,16 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
             }
         }
     });
-    // Total Lines of Code Growth Chart
+    
+    // Total Lines Chart - Growth over time
     const totalLinesData = [];
     const totalLinesLabels = [];
     commits.forEach(c => 
     {
-        if (c.total_code_lines && c.total_code_lines > 0) 
+        if (c.metric_value && c.metric_value > 0) 
         {
             totalLinesLabels.push(new Date(c.commit_timestamp).toLocaleDateString());
-            totalLinesData.push(parseInt(c.total_code_lines));
+            totalLinesData.push(parseInt(c.metric_value));
         }
     });
     const totalLinesCtx = document.getElementById('totalLinesChart');
@@ -1038,10 +1038,10 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         data: {
             labels: totalLinesLabels,
             datasets: [{
-                label: 'Total Lines of Code',
+                label: '<?= htmlspecialchars($metricConfig['label']) ?>',
                 data: totalLinesData,
-                borderColor: '#007bff',
-                backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                borderColor: '<?= $metricConfig['chartColor'] ?>',
+                backgroundColor: '<?= $metricConfig['chartColor'] ?>33',
                 borderWidth: 2,
                 fill: true,
                 tension: 0.1,
@@ -1057,7 +1057,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                     beginAtZero: true,
                     title: {
                         display: true,
-                        text: 'Lines of Code'
+                        text: '<?= htmlspecialchars($metricConfig['yAxisLabel']) ?>'
                     },
                     ticks: {
                         callback: function(value) {
@@ -1085,7 +1085,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                 tooltip: {
                     callbacks: {
                         label: function(context) {
-                            return 'Total LOC: ' + context.parsed.y.toLocaleString();
+                            return '<?= htmlspecialchars($metricConfig['label']) ?>: ' + context.parsed.y.toLocaleString();
                         }
                     }
                 }
@@ -1103,7 +1103,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
             datasets: [{
                 label: 'Percentage',
                 data: [
-                    <?= $totals['total_lines'] > 0 ? number_format(($totals['code_lines'] / $totals['total_lines']) * 100, 1) : 0 ?>,
+                    <?= $totals['total_lines'] > 0 ? number_format((($totals['total_lines'] - $totals['comment_lines'] - $totals['blank_lines']) / $totals['total_lines']) * 100, 1) : 0 ?>,
                     <?= $totals['total_lines'] > 0 ? number_format(($totals['comment_lines'] / $totals['total_lines']) * 100, 1) : 0 ?>,
                     <?= $totals['total_lines'] > 0 ? number_format(($totals['blank_lines'] / $totals['total_lines']) * 100, 1) : 0 ?>
                 ],
