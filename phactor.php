@@ -440,15 +440,13 @@ function analyzeFile($ruleInfo, $lines)
         'ncloc' => 0
     ];
     $ruleInfo['analyzer']($stats, $lines);
-    if (!empty($ruleInfo['language'])
-    && isset($config['not_code_lines'])
+    if (isset($config['not_code_lines'])
     && in_array($ruleInfo['language'], $config['not_code_lines'], true)) 
     {
         $stats['code_lines']          = 0;
         $stats['weighted_code_lines'] = 0;
     }
-    if (!empty($ruleInfo['language'])
-    && isset($config['not_code_lines'])
+    if (isset($config['not_code_lines'])
     && in_array($ruleInfo['language'], $config['not_code_statements'], true))
     {
         $stats['code_statements']          = 0;
