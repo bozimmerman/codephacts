@@ -706,6 +706,8 @@ try
     $workFound = true;
     $loopCount = 0;
     $cache = [];
+    $processedCount = 0;
+    $totalCommits = 0;
     while ($workFound) 
     {
         $loopCount++;
@@ -719,19 +721,26 @@ try
         ");
         $stmt->execute();
         $projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $totalCommits = 1;
-        $currentCommit = 0;
+        $cacheSize = 0;
         foreach ($projects as $project)
-            $totalCommits += (isset($cache[$project['source_url']]) ? count($cache[$project['source_url']]) : 0);
+        {
+            if (isset($cache[$project['source_url']]))
+                $cacheSize += count($cache[$project['source_url']]);
+        }
+        $totalCommits = max($totalCommits, $processedCount + $cacheSize);
+        
         foreach ($projects as $project) 
         {
             if (in_array($project['id'], $completedProjects))
                 continue;
-            $currentCommit += 1;
+            $currentCommit = $processedCount + 1;
             try
             {
                 if (tryProcessNextCommitForProject($project, $config['stale_timeout'], $cache, $currentCommit, $totalCommits))
+                {
+                    $processedCount++;
                     $workFound = true;
+                }
                 else
                     $completedProjects[] = $project['id'];
             }
