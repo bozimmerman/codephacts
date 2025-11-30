@@ -15,11 +15,11 @@
  limitations under the License.
  */
 
-function getDatabase($config) 
+function getDatabase($config)
 {
     $type = $config['db']['type'] ?? 'mysql';
     
-    if ($type === 'sqlite') 
+    if ($type === 'sqlite')
     {
         $dbPath = $config['db']['path'] ?? __DIR__ . '/data/codephacts.db';
         $dataDir = dirname($dbPath);
@@ -31,8 +31,8 @@ function getDatabase($config)
         if (empty($tables))
             initializeSchema($pdo, $config, 'sqlite');
         return new SQLiteCompatPDO($pdo);
-    } 
-    else 
+    }
+    else
     {
         $pdo = new PDO(
             "mysql:host={$config['db']['host']};charset={$config['db']['charset']}",
@@ -42,11 +42,11 @@ function getDatabase($config)
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $pdo->exec("CREATE DATABASE IF NOT EXISTS `{$config['db']['name']}`");
         $pdo->exec("USE `{$config['db']['name']}`");
-        try 
+        try
         {
             $pdo->query("SELECT 1 FROM projects LIMIT 1");
         }
-        catch (PDOException $e) 
+        catch (PDOException $e)
         {
             initializeSchema($pdo, $config, 'mysql');
         }
@@ -68,13 +68,15 @@ class SQLiteCompatPDO
         $sql = str_replace('NOW()', "datetime('now')", $sql);
         $sql = str_replace('FROM_UNIXTIME(?)', "datetime(?, 'unixepoch')", $sql);
         $sql = preg_replace('/UNIX_TIMESTAMP\s*\(\s*([^)]+)\s*\)/', "strftime('%s', $1)", $sql);
-        if (stripos($sql, 'ON DUPLICATE KEY UPDATE') !== false) {
+        if (stripos($sql, 'ON DUPLICATE KEY UPDATE') !== false) 
+        {
             $sql = preg_replace('/INSERT INTO/i', 'INSERT OR REPLACE INTO', $sql);
             $sql = preg_replace('/\s+ON DUPLICATE KEY UPDATE.*$/is', '', $sql);
         }
+        $sql = str_replace('`', '"', $sql);
         return $this->pdo->prepare($sql);
     }
-
+    
     public function __call($method, $args)
     {
         return call_user_func_array([
@@ -82,24 +84,26 @@ class SQLiteCompatPDO
             $method
         ], $args);
     }
-
+    
     public function query($sql)
     {
         $sql = str_replace('NOW()', "datetime('now')", $sql);
+        $sql = str_replace('`', '"', $sql);
         return $this->pdo->query($sql);
     }
-
+    
     public function exec($sql)
     {
         $sql = str_replace('NOW()', "datetime('now')", $sql);
+        $sql = str_replace('`', '"', $sql);
         return $this->pdo->exec($sql);
     }
 }
 
-function initializeSchema($pdo, $config, $type) 
+function initializeSchema($pdo, $config, $type)
 {
     $sql = file_get_contents(__DIR__ . '/schema.sql');
-    if ($type === 'sqlite') 
+    if ($type === 'sqlite')
     {
         $sql = preg_replace('/CREATE\s+DATABASE[^;]*;/i', '', $sql);
         $sql = preg_replace('/USE\s+\w+\s*;/i', '', $sql);
@@ -110,13 +114,13 @@ function initializeSchema($pdo, $config, $type)
         $sql = str_replace('DATETIME', 'TEXT', $sql);
     }
     $statements = explode(';', $sql);
-    foreach ($statements as $statement) 
+    foreach ($statements as $statement)
     {
         $statement = trim($statement);
         if (!empty($statement))
             $pdo->exec($statement);
     }
-    if ($type === 'sqlite') 
+    if ($type === 'sqlite')
     {
         $pdo->exec("
             CREATE TRIGGER IF NOT EXISTS update_statistics_timestamp
