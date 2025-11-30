@@ -16,28 +16,64 @@
  */
 $config = require __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'config.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '/db.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'estimation_functions.php';
+
+$statsColumnsMap = require __DIR__ . DIRECTORY_SEPARATOR . 'stats_columns_map.php';
+$selectedMetric = isset($_GET['metric']) ? $_GET['metric'] : 'total_lines';
+if (!isset($statsColumnsMap[$selectedMetric])) {
+    $selectedMetric = 'total_lines';
+}
+$metricConfig = $statsColumnsMap[$selectedMetric];
+$metricColumn = $metricConfig['column'];
 
 try
 {
     $pdo = getDatabase($config);
-    $stmt = $pdo->query("
-        SELECT
-            s.language,
-            SUM(s.code_lines) as total_code_lines,
-            SUM(s.comment_lines) as total_comment_lines,
-            SUM(s.blank_lines) as total_blank_lines,
-            COUNT(DISTINCT s.project_id) as project_count
-        FROM {$config['tables']['statistics']} s
-        INNER JOIN (
-            SELECT project_id, language, MAX(commit_id) as max_commit_id
-            FROM {$config['tables']['statistics']}
-            GROUP BY project_id, language
-        ) latest ON s.project_id = latest.project_id
-                 AND s.language = latest.language
-                 AND s.commit_id = latest.max_commit_id
-        GROUP BY s.language
-        ORDER BY total_code_lines DESC
-    ");
+    
+    if ($selectedMetric === 'total_lines') 
+    {
+        $stmt = $pdo->query("
+            SELECT
+                s.language,
+                SUM(s.total_lines) as total_lines,
+                SUM(s.code_lines) as code_lines,
+                SUM(s.comment_lines) as total_comment_lines,
+                SUM(s.blank_lines) as total_blank_lines,
+                COUNT(DISTINCT s.project_id) as project_count
+            FROM {$config['tables']['statistics']} s
+            INNER JOIN (
+                SELECT project_id, language, MAX(commit_id) as max_commit_id
+                FROM {$config['tables']['statistics']}
+                GROUP BY project_id, language
+            ) latest ON s.project_id = latest.project_id
+                     AND s.language = latest.language
+                     AND s.commit_id = latest.max_commit_id
+            GROUP BY s.language
+            ORDER BY total_lines DESC
+        ");
+    } 
+    else 
+    {
+        $stmt = $pdo->query("
+            SELECT
+                s.language,
+                SUM(s.total_lines) as total_lines,
+                SUM(s.{$metricColumn}) as metric_value,
+                SUM(s.comment_lines) as total_comment_lines,
+                SUM(s.blank_lines) as total_blank_lines,
+                COUNT(DISTINCT s.project_id) as project_count
+            FROM {$config['tables']['statistics']} s
+            INNER JOIN (
+                SELECT project_id, language, MAX(commit_id) as max_commit_id
+                FROM {$config['tables']['statistics']}
+                GROUP BY project_id, language
+            ) latest ON s.project_id = latest.project_id
+                     AND s.language = latest.language
+                     AND s.commit_id = latest.max_commit_id
+            GROUP BY s.language
+            ORDER BY metric_value DESC
+        ");
+    }
     $languages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 catch (PDOException $e)
@@ -45,188 +81,31 @@ catch (PDOException $e)
     die("Database error: " . $e->getMessage());
 }
 
-// ============================================================================
-// ESTIMATION MODELS (same as project.php)
-// ============================================================================
 
-function calculateCOCOMO($kloc, $mode = 'semi-detached')
-{
-    $coefficients = [
-        'organic' => ['a' => 2.4, 'b' => 1.05, 'c' => 2.5, 'd' => 0.38],
-        'semi-detached' => ['a' => 3.0, 'b' => 1.12, 'c' => 2.5, 'd' => 0.35],
-        'embedded' => ['a' => 3.6, 'b' => 1.20, 'c' => 2.5, 'd' => 0.32]
-    ];
-    
-    if (!isset($coefficients[$mode]))
-        $mode = 'semi-detached';
-        
-        $coef = $coefficients[$mode];
-        $effort = $coef['a'] * pow($kloc, $coef['b']);
-        $time = $coef['c'] * pow($effort, $coef['d']);
-        $people = $effort / $time;
-        
-        return [
-            'effort' => $effort,
-            'time' => $time,
-            'people' => $people,
-            'mode' => $mode
-        ];
-}
-
-function calculateCOCOMO2($kloc, $scaleFactors = null, $effortMultipliers = null)
-{
-    if ($scaleFactors === null) {
-        $scaleFactors = [
-            'PREC' => 3.0,
-            'FLEX' => 3.0,
-            'RESL' => 3.0,
-            'TEAM' => 3.0,
-            'PMAT' => 3.0
-        ];
-    }
-    
-    $B = 0.91 + 0.01 * array_sum($scaleFactors);
-    $A = 2.94;
-    $effort = $A * pow($kloc, $B);
-    
-    if ($effortMultipliers !== null) {
-        foreach ($effortMultipliers as $em) {
-            $effort *= $em;
-        }
-    }
-    
-    $C = 3.67;
-    $D = 0.28 + 0.2 * ($B - 0.91);
-    $time = $C * pow($effort, $D);
-    
-    $people = $effort / $time;
-    
-    return [
-        'effort' => $effort,
-        'time' => $time,
-        'people' => $people,
-        'exponent' => $B
-    ];
-}
-
-function calculateFunctionPoints($loc, $language = 'PHP')
-{
-    $locPerFP = [
-        'Assembly' => 320,
-        'C' => 128,
-        'C++' => 55,
-        'Java' => 55,
-        'JavaScript' => 47,
-        'PHP' => 60,
-        'Python' => 38,
-        'Ruby' => 38,
-        'C#' => 55,
-        'SQL' => 13,
-        'HTML' => 15,
-        'CSS' => 30,
-        'Default' => 60
-    ];
-    
-    $ratio = isset($locPerFP[$language]) ? $locPerFP[$language] : $locPerFP['Default'];
-    $functionPoints = $loc / $ratio;
-    
-    $hoursPerFP = 7.5;
-    $effort = ($functionPoints * $hoursPerFP) / 160;
-    
-    $time = 2.5 * pow($effort, 0.38);
-    $people = $effort / $time;
-    
-    return [
-        'functionPoints' => $functionPoints,
-        'effort' => $effort,
-        'time' => $time,
-        'people' => $people,
-        'language' => $language,
-        'locPerFP' => $ratio
-    ];
-}
-
-function calculateSLIM($loc, $productivity = 5000)
-{
-    $kloc = $loc / 1000;
-    $effort = 3.0 * pow($kloc, 1.12);
-    
-    for ($i = 0; $i < 10; $i++) {
-        $time = pow($loc / ($productivity * pow($effort, 1/3)), 0.75);
-        $newEffort = pow($loc / ($productivity * pow($time, 4/3)), 3);
-        
-        if (abs($newEffort - $effort) < 0.01) {
-            $effort = $newEffort;
-            break;
-        }
-        
-        $effort = ($effort + $newEffort) / 2;
-    }
-    
-    $time = pow($loc / ($productivity * pow($effort, 1/3)), 0.75);
-    $people = $effort / $time;
-    
-    return [
-        'effort' => $effort,
-        'time' => $time,
-        'people' => $people,
-        'productivity' => $productivity
-    ];
-}
-
-function calculatePutnam($loc, $technology = 8000)
-{
-    $kloc = $loc / 1000;
-    
-    $k1 = 0.15;
-    $k2 = 0.4;
-    $tMin = $k1 * pow($kloc, $k2);
-    
-    $time = $tMin * 1.2;
-    
-    $effort = pow($kloc / ($technology / 1000 * pow($time, 4/3)), 3);
-    
-    $timeMonths = $time * 12;
-    $effortMonths = $effort * 12;
-    
-    $people = $effortMonths / $timeMonths;
-    
-    return [
-        'effort' => $effortMonths,
-        'time' => $timeMonths,
-        'people' => $people,
-        'technology' => $technology,
-        'minTime' => $tMin * 12
-    ];
-}
-
-function generateEstimates($loc, $primaryLanguage = 'PHP', $cocomoMode = 'semi-detached')
-{
-    $kloc = $loc / 1000;
-    
-    return [
-        'cocomo' => calculateCOCOMO($kloc, $cocomoMode),
-        'cocomo2' => calculateCOCOMO2($kloc),
-        'functionPoints' => calculateFunctionPoints($loc, $primaryLanguage),
-        'slim' => calculateSLIM($loc),
-        'putnam' => calculatePutnam($loc)
-    ];
-}
+// Calculate totals
 $totals = [
+    'total_lines' => 0,
     'code_lines' => 0,
+    'metric_value' => 0,
     'comment_lines' => 0,
-    'blank_lines' => 0,
-    'total_lines' => 0
+    'blank_lines' => 0
 ];
 
-foreach ($languages as $lang) {
-    $totals['code_lines'] += $lang['total_code_lines'];
+foreach ($languages as $lang) 
+{
+    $totals['total_lines'] += $lang['total_lines'];
     $totals['comment_lines'] += $lang['total_comment_lines'];
     $totals['blank_lines'] += $lang['total_blank_lines'];
+    
+    if ($selectedMetric === 'total_lines')
+        $totals['code_lines'] += $lang['code_lines'];
+    else
+        $totals['metric_value'] += $lang['metric_value'];
 }
-$totals['total_lines'] = $totals['code_lines'] + $totals['comment_lines'] + $totals['blank_lines'];
+
 $primaryLanguage = !empty($languages) ? $languages[0]['language'] : 'PHP';
-$estimates = $totals['code_lines'] > 0 ? generateEstimates($totals['code_lines'], $primaryLanguage) : null;
+$estimateBase = $selectedMetric === 'total_lines' ? $totals['code_lines'] : $totals['metric_value'];
+$estimates = $estimateBase > 0 ? generateEstimates($estimateBase, $primaryLanguage) : null;
 $hourlyRate = 75;
 $hoursPerMonth = 160;
 ?>
@@ -320,6 +199,23 @@ $hoursPerMonth = 160;
 
     <div class="container">
         <div class="card">
+            <h2>📊 View Metrics</h2>
+            <form method="GET" style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                <label for="metric" style="margin: 0; font-weight: bold;">Select Metric:</label>
+                <select name="metric" id="metric" onchange="this.form.submit()" style="width: auto; margin: 0;">
+                    <?php foreach ($statsColumnsMap as $key => $config): ?>
+                        <option value="<?= $key ?>" <?= $selectedMetric === $key ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($config['label']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <span style="color: #6c757d; font-size: 0.9em;">
+                    <?= htmlspecialchars($metricConfig['description']) ?>
+                </span>
+            </form>
+        </div>
+
+        <div class="card">
             <h2>Language Statistics</h2>
             <p>Code statistics across all projects, by programming language.</p>
 
@@ -331,10 +227,14 @@ $hoursPerMonth = 160;
                         <tr>
                             <th>Language</th>
                             <th>Projects</th>
-                            <th>Code Lines</th>
+                            <th>Total Lines</th>
+                            <?php if ($selectedMetric === 'total_lines'): ?>
+                                <th>Code Lines</th>
+                            <?php else: ?>
+                                <th><?= htmlspecialchars($metricConfig['label']) ?></th>
+                            <?php endif; ?>
                             <th>Comment Lines</th>
                             <th>Blank Lines</th>
-                            <th>Total Lines</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -342,19 +242,27 @@ $hoursPerMonth = 160;
                             <tr>
                                 <td><strong><?= htmlspecialchars($lang['language']) ?></strong></td>
                                 <td><?= $lang['project_count'] ?></td>
-                                <td><?= number_format($lang['total_code_lines'] ?? 0) ?></td>
+                                <td><?= number_format($lang['total_lines'] ?? 0) ?></td>
+                                <?php if ($selectedMetric === 'total_lines'): ?>
+                                    <td><?= number_format($lang['code_lines'] ?? 0) ?></td>
+                                <?php else: ?>
+                                    <td><?= number_format($lang['metric_value'] ?? 0) ?></td>
+                                <?php endif; ?>
                                 <td><?= number_format($lang['total_comment_lines'] ?? 0) ?></td>
                                 <td><?= number_format($lang['total_blank_lines'] ?? 0) ?></td>
-                                <td><?= number_format($lang['total_code_lines'] + $lang['total_comment_lines'] + $lang['total_blank_lines']) ?></td>
                             </tr>
                         <?php endforeach; ?>
                         <tr style="font-weight: bold; border-top: 2px solid #dee2e6;">
                             <td>Total</td>
                             <td><?= count($languages) ?> languages</td>
-                            <td><?= number_format($totals['code_lines']) ?></td>
+                            <td><?= number_format($totals['total_lines']) ?></td>
+                            <?php if ($selectedMetric === 'total_lines'): ?>
+                                <td><?= number_format($totals['code_lines']) ?></td>
+                            <?php else: ?>
+                                <td><?= number_format($totals['metric_value']) ?></td>
+                            <?php endif; ?>
                             <td><?= number_format($totals['comment_lines']) ?></td>
                             <td><?= number_format($totals['blank_lines']) ?></td>
-                            <td><?= number_format($totals['total_lines']) ?></td>
                         </tr>
                     </tbody>
                 </table>
@@ -368,7 +276,7 @@ $hoursPerMonth = 160;
         <?php if ($estimates !== null): ?>
         <div class="card">
             <h2>📊 Portfolio-Wide Cost Estimation</h2>
-            <p>Aggregate estimates across all projects based on <strong><?= number_format($totals['code_lines']) ?></strong> total lines of code (<?= number_format($totals['code_lines'] / 1000, 1) ?> KLOC)</p>
+            <p>Aggregate estimates across all projects based on <strong><?= number_format($estimateBase) ?></strong> <?= $selectedMetric === 'total_lines' ? 'lines of code' : htmlspecialchars(strtolower($metricConfig['label'])) ?> (<?= number_format($estimateBase / 1000, 1) ?> K)</p>
             
             <div class="estimate-grid">
                 <!-- COCOMO -->
@@ -617,8 +525,14 @@ $hoursPerMonth = 160;
         data: {
             labels: <?= json_encode(array_column($languages, 'language')) ?>,
             datasets: [{
-                label: 'Lines of Code',
-                data: <?= json_encode(array_column($languages, 'total_code_lines')) ?>,
+                label: '<?= htmlspecialchars($metricConfig['label']) ?>',
+                data: <?php 
+                    if ($selectedMetric === 'total_lines') {
+                        echo json_encode(array_column($languages, 'code_lines'));
+                    } else {
+                        echo json_encode(array_column($languages, 'metric_value'));
+                    }
+                ?>,
                 backgroundColor: [
                     '#007bff',
                     '#28a745',
