@@ -1,7 +1,10 @@
-2. Setup with Caddy 8088 8089 8090 7777 9999
+Date range selector for all charts (not just query page) -- maybe drag click mouse over chart dates to change date range.
+Language filter on project page to see only specific languages
+Contributor filter (if commit_user data is rich enough)
+Branch comparison -- heck, just supporting multiple branches for git!
+Batch re-process ability for individual projects/branches
 
 In phactor.php and rules:
-1. Add a weight factor for every language rule that does not return 1: use for weighted columns in phactor.php by multiplying factor by the appropriate other column.
 2. Add complexity number(s) to the statistics table for every commit
 3. Add to each appropriate rule the ability to return complexity number(s) for each file analyzed
 4. Add some way to average or sum or otherwise combine complexity number(s) to come with with complexity number(s) for each commit language
@@ -13,12 +16,6 @@ New chart types to consider:
 - Sankey diagram showing how code flows between different components
 - Velocity chart showing rate of code change over time
 - Technical debt estimation chart (comment ratio, complexity trends)
-
-Date range selector for all charts (not just query page) -- maybe drag click mouse over chart dates to change date range.
-Language filter on project page to see only specific languages
-Contributor filter (if commit_user data is rich enough)
-Branch comparison -- heck, just supporting multiple branches for git!
-Batch re-process ability for individual projects/branches
 
 Complexity suggestions:
 cyclomatic_complexity FLOAT DEFAULT 0,
