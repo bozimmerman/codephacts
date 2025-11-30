@@ -665,7 +665,7 @@ function findCommitWithoutStats($projectId)
     $commitsTable = $config['tables']['commits'] ?? 'commits';
     $statsTable = $config['tables']['statistics'] ?? 'statistics';
     $stmt = $pdo->prepare("
-        SELECT c.id, c.commit_hash as commit, UNIX_TIMESTAMP(c.commit_timestamp) as timestamp, c.commit_user as user
+        SELECT c.id, c.commit_hash as commit_hash, UNIX_TIMESTAMP(c.commit_timestamp) as timestamp, c.commit_user as user
         FROM `$commitsTable` c
         LEFT JOIN `$statsTable` s ON s.commit_id = c.id
         WHERE c.project_id = ?
@@ -679,7 +679,7 @@ function findCommitWithoutStats($projectId)
         return null;
     return [
         'id' => $row['id'],
-        'commit' => ['commit' => $row['commit'], 'timestamp' => $row['timestamp'], 'user' => $row['user']]
+        'commit' => ['commit' => $row['commit_hash'], 'timestamp' => $row['timestamp'], 'user' => $row['user']]
     ];
 }
 
