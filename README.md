@@ -29,7 +29,16 @@ cost models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
 - Git and/or SVN command-line tools (depending on your repositories)
 - Web server (Caddy, Apache, Nginx, or similar)
 
-### Setup Steps
+## Running in Docker (from Dockerhub)
+```
+docker run -d \
+  -p 8088:8088 \
+  -v codephacts_data:/app/data \
+  -e ADMIN_PASSWORD=whatever \
+  bozimmerman/codephacts:latest
+```
+
+### Manual Setup Steps
 
 1. **Clone or download** the CodePhacts repository to your web server directory
 
@@ -71,6 +80,8 @@ cost models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
 ```bash
    chmod 755 admin/
    chmod 755 public/
+   mkdir -p data/
+   chmod 755 data/
    chmod 644 conphig.php
 ```
 
