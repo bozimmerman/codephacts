@@ -90,13 +90,17 @@ $phactorPath = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'pha
 <body>
     <header>
         <div class="container">
-            <h1>CodePhacts Admin</h1>
-            <nav>
-                <a href="index.php">Dashboard</a>
-                <a href="projects.php">Manage Projects</a>
-                <a href="../public/index.php">View Public Site</a>
-                <a href="logout.php">Logout</a>
-            </nav>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <a href="index.php" style="text-decoration: none;">
+                    <img src="../images/codephactsa.png" alt="CodePhacts Admin" style="height: 100px; display: block; margin: -30px 0;">
+                </a>
+                <nav>
+                    <a href="index.php">Dashboard</a>
+                    <a href="projects.php">Manage Projects</a>
+                    <a href="../public/index.php">View Public Site</a>
+                    <a href="logout.php">Logout</a>
+                </nav>
+            </div>
         </div>
     </header>
     
@@ -111,6 +115,14 @@ $phactorPath = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'pha
             </div>
             
             <p id="status">Initializing update process...</p>
+            <div style="margin-top: 20px;" id="cancelSection">
+                <button onclick="requestCancellation()" class="button danger" id="cancelButton">
+                    🛑 Request Cancellation
+                </button>
+                <span id="cancelStatus" style="margin-left: 10px; color: #dc3545; font-weight: bold; display: none;">
+                    Cancellation requested - will stop at next safe point...
+                </span>
+            </div>
             
             <div class="output-box" id="outputBox"></div>
             
@@ -261,6 +273,52 @@ $phactorPath = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'pha
         // Handle page unload
         window.addEventListener('beforeunload', function() {
             eventSource.close();
+        });
+        
+        function requestCancellation() 
+        {
+            if (!confirm('Are you sure you want to cancel the update process?\n\nThe process will stop safely at the next checkpoint.'))
+                return;
+            
+            document.getElementById('cancelButton').disabled = true;
+            document.getElementById('cancelStatus').style.display = 'inline';
+            
+            fetch('run-update-cancel.php', 
+            {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) 
+                {
+                    addOutput('✓ Cancellation request received', 'success');
+                    updateStatus('Cancellation requested - waiting for safe stop point...');
+                    setTimeout(() => {
+                        document.getElementById('cancelSection').style.display = 'none';
+                    }, 2000);
+                } 
+                else 
+                {
+                    addOutput('✗ Failed to request cancellation: ' + data.error, 'error');
+                    document.getElementById('cancelButton').disabled = false;
+                    document.getElementById('cancelStatus').style.display = 'none';
+                }
+            })
+            .catch(error => {
+                addOutput('✗ Error requesting cancellation: ' + error, 'error');
+                document.getElementById('cancelButton').disabled = false;
+                document.getElementById('cancelStatus').style.display = 'none';
+            });
+        }
+
+        eventSource.addEventListener('message', function(event) 
+        {
+            try 
+            {
+                const data = JSON.parse(event.data);
+                if (data.type === 'complete' || data.type === 'all_complete')
+                    document.getElementById('cancelSection').style.display = 'none';
+            } catch(e) {}
         });
     </script>
 </body>

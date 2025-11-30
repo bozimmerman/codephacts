@@ -103,13 +103,17 @@ catch (PDOException $e)
 <body>
     <header>
         <div class="container">
-            <h1>CodePhacts Admin</h1>
-            <nav>
-                <a href="index.php">Dashboard</a>
-                <a href="projects.php">Manage Projects</a>
-                <a href="../public/index.php">View Public Site</a>
-                <a href="logout.php">Logout</a>
-            </nav>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <a href="index.php" style="text-decoration: none;">
+                    <img src="../images/codephactsa.png" alt="CodePhacts Admin" style="height: 100px; display: block; margin: -30px 0;">
+                </a>
+                <nav>
+                    <a href="index.php">Dashboard</a>
+                    <a href="projects.php">Manage Projects</a>
+                    <a href="../public/index.php">View Public Site</a>
+                    <a href="logout.php">Logout</a>
+                </nav>
+            </div>
         </div>
     </header>
     
