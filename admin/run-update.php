@@ -115,6 +115,7 @@ $phactorPath = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'pha
             </div>
             
             <p id="status">Initializing update process...</p>
+            <div class="output-box" id="outputBox"></div>
             <div style="margin-top: 20px;" id="cancelSection">
                 <button onclick="requestCancellation()" class="button danger" id="cancelButton">
                     🛑 Request Cancellation
@@ -123,9 +124,6 @@ $phactorPath = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'pha
                     Cancellation requested - will stop at next safe point...
                 </span>
             </div>
-            
-            <div class="output-box" id="outputBox"></div>
-            
             <div style="margin-top: 20px; display: none;" id="completedActions">
                 <a href="index.php" class="button">Back to Dashboard</a>
                 <a href="projects.php" class="button secondary">Manage Projects</a>
@@ -227,6 +225,7 @@ $phactorPath = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'pha
                         updateStatus('All updates completed!');
                         spinner.style.display = 'none';
                         completedActions.style.display = 'block';
+                        cancelSection.style.display = 'none';
                         eventSource.close();
                         break;
                         

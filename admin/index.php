@@ -74,7 +74,6 @@ catch (PDOException $e)
             </div>
         </div>
     </header>
-    
     <div class="container">
         <div class="card">
             <h2>Dashboard Overview</h2>
@@ -92,6 +91,10 @@ catch (PDOException $e)
                     <p>Total Lines of Code</p>
                 </div>
             </div>
+        </div>
+        <div class="card">
+            <a href="projects.php?action=add" class="button">Add New Project</a>
+            <button onclick="if(confirm('Update all projects?')) window.location.href='run-update.php'" class="button secondary">Run Update</button>
         </div>
         
         <div class="card">
@@ -114,12 +117,6 @@ catch (PDOException $e)
                     <?php endforeach; ?>
                 </tbody>
             </table>
-        </div>
-        
-        <div class="card">
-            <h2>Quick Actions</h2>
-            <a href="projects.php?action=add" class="button">Add New Project</a>
-            <button onclick="if(confirm('Update all projects?')) window.location.href='run-update.php'" class="button secondary">Run Update</button>
         </div>
     </div>
 </body>

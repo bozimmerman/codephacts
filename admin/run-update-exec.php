@@ -17,6 +17,7 @@
 $config = require_once 'auth.php';
 
 set_time_limit(0);
+session_write_close();
 ini_set('max_execution_time', 0);
 //@apache_setenv('no-gzip', 1);
 @ini_set('zlib.output_compression', 0);

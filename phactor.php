@@ -721,11 +721,12 @@ try
     $cache = [];
     $processedCount = 0;
     $totalCommits = 0;
+    $abortFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'codephacts_abort_' . md5(__DIR__) . '.txt';
     while ($workFound) 
     {
-        if (is_file(__DIR__ . '/abort.txt'))
+        if (is_file($abortFile))
         {
-            unlink(__DIR__ . '/abort.txt');
+            unlink($abortFile);
             outputProgress('all_complete', "Aborted.");
             break;
         }

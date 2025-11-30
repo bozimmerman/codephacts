@@ -18,7 +18,8 @@ $config = require_once 'auth.php';
 
 header('Content-Type: application/json');
 
-$abortFile = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'abort.txt';
+$projectRoot = dirname(__DIR__);
+$abortFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'codephacts_abort_' . md5(realpath($projectRoot)) . '.txt';
 
 try {
     if (file_put_contents($abortFile, date('Y-m-d H:i:s')) === false) {
