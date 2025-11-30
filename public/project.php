@@ -15,17 +15,13 @@
  limitations under the License.
  */
 $config = require __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'config.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '/db.php';
 
 $projectId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
 try
 {
-    $pdo = new PDO(
-        "mysql:host={$config['db']['host']};dbname={$config['db']['name']};charset={$config['db']['charset']}",
-        $config['db']['user'],
-        $config['db']['pass']
-    );
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo = getDatabase($config);
     $stmt = $pdo->prepare("SELECT * FROM {$config['tables']['projects']} WHERE id = ?");
     $stmt->execute([$projectId]);
     $project = $stmt->fetch(PDO::FETCH_ASSOC);

@@ -15,18 +15,14 @@
  limitations under the License.
  */
 $config = require_once 'auth.php';
+require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'db.php';
 
 $message = null;
 $error = null;
 
 try
 {
-    $pdo = new PDO(
-        "mysql:host={$config['db']['host']};dbname={$config['db']['name']};charset={$config['db']['charset']}",
-        $config['db']['user'],
-        $config['db']['pass']
-    );
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo = getDatabase($config);
     if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])) 
     {
         $stmt = $pdo->prepare("DELETE FROM {$config['tables']['projects']} WHERE id = ?");

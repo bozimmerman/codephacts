@@ -15,25 +15,15 @@
  limitations under the License.
  */
 $config = require_once 'auth.php';
+require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'db.php';
 
 try 
 {
-    $pdo = new PDO(
-        "mysql:host={$config['db']['host']};dbname={$config['db']['name']};charset={$config['db']['charset']}",
-        $config['db']['user'],
-        $config['db']['pass']
-    );
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    // Get project count
+    $pdo = getDatabase($config);
     $stmt = $pdo->query("SELECT COUNT(*) as count FROM {$config['tables']['projects']}");
     $projectCount = $stmt->fetch(PDO::FETCH_ASSOC)['count'];
-    
-    // Get total commits
     $stmt = $pdo->query("SELECT COUNT(*) as count FROM {$config['tables']['commits']}");
     $commitCount = $stmt->fetch(PDO::FETCH_ASSOC)['count'];
-    
-    // Get total lines of code
     $stmt = $pdo->query("
         SELECT SUM(code_lines) as total 
         FROM {$config['tables']['statistics']} s
@@ -45,8 +35,6 @@ try
     ");
     $totalLines = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     if (!$totalLines) $totalLines = 0;
-    
-    // Get recent activity
     $stmt = $pdo->query("
         SELECT p.name, c.commit_hash, c.commit_timestamp 
         FROM {$config['tables']['commits']} c
@@ -55,7 +43,6 @@ try
         LIMIT 10
     ");
     $recentActivity = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
 }
 catch (PDOException $e) 
 {

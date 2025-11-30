@@ -15,6 +15,7 @@
  limitations under the License.
  */
 $config = require_once 'auth.php';
+require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'db.php';
 
 $message = null;
 $error = null;
@@ -33,13 +34,7 @@ $project = [
 
 try
 {
-    $pdo = new PDO(
-        "mysql:host={$config['db']['host']};dbname={$config['db']['name']};charset={$config['db']['charset']}",
-        $config['db']['user'],
-        $config['db']['pass']
-    );
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
+    $pdo = getDatabase($config);$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     if (isset($_GET['id']))
     {
         $stmt = $pdo->prepare("SELECT * FROM {$config['tables']['projects']} WHERE id = ?");

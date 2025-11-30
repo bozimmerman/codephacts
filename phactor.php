@@ -18,6 +18,7 @@
  * project processing
  */
 $config = require 'config.php';
+require_once __DIR__ . '/db.php';
 
 function outputProgress($type, $message, $data = []) 
 {
@@ -51,24 +52,36 @@ function canAccessRepo($sourceType, $sourceUrl, $authType = 'none', $authUsernam
     {
         $gitVersion = trim(shell_exec('git --version 2>&1'));
         if (stripos($gitVersion, 'git version') === false)
+        {
+            outputProgress("error","Cannot access git repo: git isn't installed",[]);
             return false;
+        }
         $cmd = "git ls-remote " . escapeshellarg($sourceUrl) . " HEAD 2>&1";
         $cmd = buildAuthenticatedCommand($sourceType, $sourceUrl, $authType, $authUsername, $authPassword, $authSshKeyPath, $cmd);
         $output = trim(shell_exec($cmd));
-        if (empty($output) || stripos($output, 'fatal') !== false)
+        if (empty($output) || stripos($output, 'fatal') !== false) 
+        {
+            outputProgress("error","Cannot access git repo: $sourceUrl - Output: $output",[]);
             return false;
+        }
         return true;
     }
     elseif ($sourceType === 'svn')
     {
         $svnVersion = trim(shell_exec('svn --version 2>&1'));
         if (stripos($svnVersion, 'svn, version') === false)
+        {
+            outputProgress("error","Cannot access git repo: git isn't installed",[]);
             return false;
+        }
         $cmd = "svn info " . escapeshellarg($sourceUrl) . " 2>&1";
         $cmd = buildAuthenticatedCommand($sourceType, $sourceUrl, $authType, $authUsername, $authPassword, $authSshKeyPath, $cmd);
         $output = trim(shell_exec($cmd));
         if (empty($output) || stripos($output, 'E170001') !== false || stripos($output, 'Unable to connect') !== false)
+        {
+            outputProgress("error","Cannot access svn repo: $sourceUrl - Output: $output",[]);
             return false;
+        }
         return true;
     }
     else
@@ -141,7 +154,11 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit, $authType, $authUser
         }
         try
         {
-            $logCmd = "git --git-dir=" . escapeshellarg($tempRepo) . " log --format='%H|%ct|%an'";
+            $format = '%H|%ct|%an';
+            if (DIRECTORY_SEPARATOR === '\\')
+                $logCmd = "git --git-dir=" . escapeshellarg($tempRepo) . " log --format=\"$format\"";
+            else
+                $logCmd = "git --git-dir=" . escapeshellarg($tempRepo) . " log --format='$format'";
             if ($lastCommit)
                 $logCmd .= " " . escapeshellarg($lastCommit) . "..HEAD";
             $logOutput = shell_exec($logCmd . " 2>&1");
@@ -684,12 +701,7 @@ function tryProcessNextCommitForProject($project, $stale_timeout, &$cache = [])
 // Main processing loop
 try 
 {
-    $pdo = new PDO(
-        "mysql:host={$config['db']['host']};dbname={$config['db']['name']};charset={$config['db']['charset']}",
-        $config['db']['user'],
-        $config['db']['pass']
-    );
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo = getDatabase($config);
     $projectsTable = $config['tables']['projects'];
     $completedProjects = [];
     $workFound = true;
@@ -721,7 +733,11 @@ try
             }
             catch (Exception $e) 
             {
-                error_log("Error processing {$project['name']}: {$e->getMessage()}");
+                $msg = "Error processing {$project['name']}: {$e->getMessage()}";
+                if ($e instanceof PDOException) {
+                    $msg .= "\nSQL: " . ($stmt->queryString ?? 'unknown');
+                }
+                error_log($msg);
                 outputProgress('error', "Error: {$e->getMessage()}");
             }
         }

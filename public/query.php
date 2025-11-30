@@ -15,18 +15,14 @@
  limitations under the License.
  */
 $config = require __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'config.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '/db.php';
 
 $results = null;
 $error = null;
 
 try
 {
-    $pdo = new PDO(
-        "mysql:host={$config['db']['host']};dbname={$config['db']['name']};charset={$config['db']['charset']}",
-        $config['db']['user'],
-        $config['db']['pass']
-    );
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo = getDatabase($config);
     $stmt = $pdo->query("SELECT id, name FROM {$config['tables']['projects']} ORDER BY name ASC");
     $projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $pdo->query("SELECT DISTINCT language FROM {$config['tables']['statistics']} ORDER BY language ASC");

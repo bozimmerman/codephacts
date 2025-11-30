@@ -15,15 +15,11 @@
  limitations under the License.
  */
 $config = require __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'config.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '/db.php';
 
 try
 {
-    $pdo = new PDO(
-        "mysql:host={$config['db']['host']};dbname={$config['db']['name']};charset={$config['db']['charset']}",
-        $config['db']['user'],
-        $config['db']['pass']
-    );
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo = getDatabase($config);
     $stmt = $pdo->query("
         SELECT
             s.language,
@@ -216,8 +212,6 @@ function generateEstimates($loc, $primaryLanguage = 'PHP', $cocomoMode = 'semi-d
         'putnam' => calculatePutnam($loc)
     ];
 }
-
-// Calculate totals and estimates
 $totals = [
     'code_lines' => 0,
     'comment_lines' => 0,
@@ -231,12 +225,8 @@ foreach ($languages as $lang) {
     $totals['blank_lines'] += $lang['total_blank_lines'];
 }
 $totals['total_lines'] = $totals['code_lines'] + $totals['comment_lines'] + $totals['blank_lines'];
-
-// Determine primary language (most code lines)
 $primaryLanguage = !empty($languages) ? $languages[0]['language'] : 'PHP';
-$estimates = generateEstimates($totals['code_lines'], $primaryLanguage);
-
-// Calculate costs
+$estimates = $totals['code_lines'] > 0 ? generateEstimates($totals['code_lines'], $primaryLanguage) : null;
 $hourlyRate = 75;
 $hoursPerMonth = 160;
 ?>
@@ -375,7 +365,7 @@ $hoursPerMonth = 160;
             <?php endif; ?>
         </div>
 
-        <?php if ($totals['code_lines'] > 0): ?>
+        <?php if ($estimates !== null): ?>
         <div class="card">
             <h2>📊 Portfolio-Wide Cost Estimation</h2>
             <p>Aggregate estimates across all projects based on <strong><?= number_format($totals['code_lines']) ?></strong> total lines of code (<?= number_format($totals['code_lines'] / 1000, 1) ?> KLOC)</p>

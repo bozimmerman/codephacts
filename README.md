@@ -27,7 +27,6 @@ cost models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
 ### Prerequisites
 
 - PHP 7.4 or higher
-- MySQL 5.7+ or MariaDB 10.2+
 - Git and/or SVN command-line tools (depending on your repositories)
 - Web server (Apache, Nginx, or similar)
 
@@ -35,27 +34,22 @@ cost models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
 
 1. **Clone or download** the CodePhacts repository to your web server directory
 
-2. **Create the database**:
-```bash
-   mysql -u root -p < schema.sql
-```
-   
-   Or manually execute the SQL in `schema.sql` to create the `codephacts` database and tables.
-
-3. **Configure the application** by editing `config.php`:
+2. **Configure the application** by editing `config.php`:
 ```php
    return [
        // IMPORTANT: Change this password immediately!
        'admin_password' => 'your-secure-password-here',
        
-       'db' => [
-           'host'     => 'localhost',
-           'port'     => 3306,
-           'name'     => 'codephacts',
-           'user'     => 'your-db-username',
-           'pass'     => 'your-db-password',
-           'charset'  => 'utf8',
-       ],
+      'db' => [
+        'type'     => 'sqlite', // sqlite or mysql
+        'host'     => 'localhost',        // MySQL host
+        'port'     => 3306,               // Optional: MySQL port
+        'name'     => 'codephacts',      // Database name
+        'user'     => 'root',           // DB username
+        'pass'     => 'secretpassword',   // DB password
+        'charset'  => 'utf8',          // Recommended charset
+        'path'     => __DIR__ . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . 'codephacts.db', // sql lite path
+      ],
        
        // How long to wait (in seconds) before reprocessing a commit
        'stale_timeout' => 10000,
@@ -68,16 +62,16 @@ cost models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
    ];
 ```
 
-4. **Set proper permissions**:
+3. **Set proper permissions**:
 ```bash
    chmod 755 admin/
    chmod 755 public/
    chmod 644 config.php
 ```
 
-5. **Configure your web server** to point to the CodePhacts directory. The application entry point is `index.php`, which redirects to `public/index.php`.
+4. **Configure your web server** to point to the CodePhacts directory. The application entry point is `index.php`, which redirects to `public/index.php`.
 
-6. **Verify Git/SVN access**: Ensure your web server user has network access and credentials (if needed) to clone/checkout your repositories.
+5. **Verify Git/SVN access**: Ensure your web server user has network access and credentials (if needed) to clone/checkout your repositories.
 
 ## Configuration
 
@@ -92,14 +86,16 @@ cost models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
 
 Update the database credentials in `config.php`:
 ```php
-'db' => [
-    'host' => 'localhost',      // Your MySQL host
-    'port' => 3306,             // MySQL port
-    'name' => 'codephacts',     // Database name
-    'user' => 'root',           // Database user
-    'pass' => 'secretpassword', // Database password
-    'charset' => 'utf8',
-],
+    'db' => [
+        'type'     => 'sqlite', // sqlite or mysql
+        'host'     => 'localhost',        // MySQL host
+        'port'     => 3306,               // Optional: MySQL port
+        'name'     => 'codephacts',      // Database name
+        'user'     => 'root',           // DB username
+        'pass'     => 'secretpassword',   // DB password
+        'charset'  => 'utf8',          // Recommended charset
+        'path'     => __DIR__ . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . 'codephacts.db', // sql lite path
+    ],
 ```
 
 ### Stale Timeout

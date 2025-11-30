@@ -19,16 +19,22 @@
  */
 
 return [
-    'admin_password' => 'ForTheLoveOfAllThatIsHolyPleaseChangeThisAndRemoveTheRand(1,999..)' . rand(1, 9999999),
+    'admin_password' => 'PASSWORD',  // please change this
     'db' => [
+        'type'     => 'sqlite', // sqlite or mysql
         'host'     => 'localhost',        // MySQL host
         'port'     => 3306,               // Optional: MySQL port
         'name'     => 'codephacts',      // Database name
         'user'     => 'root',           // DB username
         'pass'     => 'secretpassword',   // DB password
         'charset'  => 'utf8',          // Recommended charset
+        'path'     => __DIR__ . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . 'codephacts.db', // sql lite path
     ],
     'stale_timeout' => 10000,
+    'server' => [
+        'port' => 8088,
+        'host' => 'localhost'
+    ],
     'tables' => [
         'projects'      => 'projects',
         'statistics' => 'statistics',
