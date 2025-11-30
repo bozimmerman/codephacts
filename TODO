@@ -1,25 +1,4 @@
-1. Add SQLLite support (mysql optional)
 2. Setup with Caddy 8088 8089 8090 7777 9999
-
-
-
-On public project page:
-1. All charts graphs should default to Using total lines (see below)
-2. All charts graphs labeling to make explicit that total lines is used (not code lines, or lines of code)
-3. Create a chart mapping total, code lines, code statements, weighted, etc to their statistics column and proper labels.
-4. Make the entire page convertable between the previously created chart (e.g. ability to choose weighted code stats instead of total lines)
-5. Conversion in #4 should recalculate stats from new column and convert labels as appropriate from the chart
-6. After 1-5, allow the default statistics column used (presently Total Lines) to come from the project table instead of hard coded.
-7. Add ability for the user to select from one of the entries in chart (with explanation for each) 3.  Such a selection is saved in cookies.
-
-On public languages page:
-1. Same changes as on public project page
-
-Add a Contributors tab doing to contributors what languages does for, well, languages.
-
-
-On admin projects page:
-1. Add default project statistics "lines" column to use for charts graphs in public project and languages pages
 
 In phactor.php and rules:
 1. Add a weight factor for every language rule that does not return 1: use for weighted columns in phactor.php by multiplying factor by the appropriate other column.
