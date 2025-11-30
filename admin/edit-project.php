@@ -198,7 +198,6 @@ catch (PDOException $e)
                 <p><strong>Last Commit:</strong> <?= htmlspecialchars($project['last_commit'] ? $project['last_commit'] : 'None') ?></p>
                 
                 <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #dee2e6;">
-                    <h3 style="color: #dc3545;">Danger Zone</h3>
                     <p style="color: #6c757d; font-size: 0.9em;">Reset all statistics and commits for this project. This will allow all data to be regenerated on the next update.</p>
                     <button onclick="resetProjectStats(<?= $project['id'] ?>)" class="button danger">
                         🔄 Reset Statistics & Commits
