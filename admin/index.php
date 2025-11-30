@@ -25,16 +25,18 @@ try
     $stmt = $pdo->query("SELECT COUNT(*) as count FROM {$config['tables']['commits']}");
     $commitCount = $stmt->fetch(PDO::FETCH_ASSOC)['count'];
     $stmt = $pdo->query("
-        SELECT SUM(code_lines) as total 
+        SELECT
+            SUM(s.code_lines) as total_code_lines
         FROM {$config['tables']['statistics']} s
         INNER JOIN (
-            SELECT project_id, MAX(id) as max_id
-            FROM {$config['tables']['commits']}
+            SELECT project_id, MAX(commit_id) as max_commit_id
+            FROM {$config['tables']['statistics']}
             GROUP BY project_id
-        ) latest ON s.commit_id = latest.max_id
+        ) latest ON s.project_id = latest.project_id AND s.commit_id = latest.max_commit_id
     ");
-    $totalLines = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
-    if (!$totalLines) $totalLines = 0;
+    $totalLines = $stmt->fetch(PDO::FETCH_ASSOC)['total_code_lines'];
+    if (!$totalLines) 
+        $totalLines = 0;
     $stmt = $pdo->query("
         SELECT p.name, c.commit_hash, c.commit_timestamp 
         FROM {$config['tables']['commits']} c
