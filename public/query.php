@@ -96,6 +96,7 @@ catch (PDOException $e)
                     <a href="index.php">Projects</a>
                     <a href="query.php">Query Data</a>
                     <a href="languages.php">Languages</a>
+                    <a href="contributors.php">Contributors</a>
                 </nav>
             </div>
         </div>

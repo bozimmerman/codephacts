@@ -18,6 +18,7 @@ $config = require __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '
 require_once __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '/db.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'estimation_functions.php';
 
+// Load metrics configuration and determine selected metric
 $statsColumnsMap = require __DIR__ . DIRECTORY_SEPARATOR . 'stats_columns_map.php';
 $selectedMetric = isset($_GET['metric']) ? $_GET['metric'] : 'total_lines';
 if (!isset($statsColumnsMap[$selectedMetric])) {
@@ -30,81 +31,125 @@ try
 {
     $pdo = getDatabase($config);
     
-    if ($selectedMetric === 'total_lines') 
-    {
-        $stmt = $pdo->query("
-            SELECT
-                s.language,
-                SUM(s.total_lines) as total_lines,
-                SUM(s.code_lines) as code_lines,
-                SUM(s.comment_lines) as total_comment_lines,
-                SUM(s.blank_lines) as total_blank_lines,
-                COUNT(DISTINCT s.project_id) as project_count
-            FROM {$config['tables']['statistics']} s
-            INNER JOIN (
-                SELECT project_id, language, MAX(commit_id) as max_commit_id
-                FROM {$config['tables']['statistics']}
-                GROUP BY project_id, language
-            ) latest ON s.project_id = latest.project_id
-                     AND s.language = latest.language
-                     AND s.commit_id = latest.max_commit_id
-            GROUP BY s.language
-            ORDER BY total_lines DESC
-        ");
-    } 
-    else 
-    {
-        $stmt = $pdo->query("
-            SELECT
-                s.language,
-                SUM(s.total_lines) as total_lines,
-                SUM(s.{$metricColumn}) as metric_value,
-                SUM(s.comment_lines) as total_comment_lines,
-                SUM(s.blank_lines) as total_blank_lines,
-                COUNT(DISTINCT s.project_id) as project_count
-            FROM {$config['tables']['statistics']} s
-            INNER JOIN (
-                SELECT project_id, language, MAX(commit_id) as max_commit_id
-                FROM {$config['tables']['statistics']}
-                GROUP BY project_id, language
-            ) latest ON s.project_id = latest.project_id
-                     AND s.language = latest.language
-                     AND s.commit_id = latest.max_commit_id
-            GROUP BY s.language
-            ORDER BY metric_value DESC
-        ");
+    // Get all commits ordered by project and timestamp - simple query, no joins
+    $stmt = $pdo->query("
+        SELECT
+            c.id,
+            c.project_id,
+            c.commit_user,
+            c.commit_timestamp,
+            s.language,
+            s.total_lines,
+            s.code_lines,
+            s.{$metricColumn} as metric_value
+        FROM {$config['tables']['commits']} c
+        INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+        WHERE c.commit_user IS NOT NULL AND c.commit_user != ''
+        ORDER BY c.project_id, s.language, c.commit_timestamp ASC
+    ");
+    $allCommits = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Calculate deltas by iterating through commits in PHP (much faster than SQL subqueries)
+    $contributors = [];
+    $previousState = []; // Track [project_id][language] => values
+    
+    foreach ($allCommits as $commit) {
+        $user = $commit['commit_user'];
+        $projectId = $commit['project_id'];
+        $language = $commit['language'];
+        $commitId = $commit['id'];
+        $key = $projectId . '_' . $language;
+        
+        // Initialize contributor if needed
+        if (!isset($contributors[$user])) {
+            $contributors[$user] = [
+                'contributor' => $user,
+                'commits' => [],  // Track unique commit IDs
+                'projects' => [],
+                'total_lines_delta' => 0,
+                'code_lines_delta' => 0,
+                'metric_value_delta' => 0,
+                'first_commit' => $commit['commit_timestamp'],
+                'last_commit' => $commit['commit_timestamp']
+            ];
+        }
+        
+        $contributors[$user]['commits'][$commitId] = true;  // Track unique commits
+        $contributors[$user]['projects'][$projectId] = true;
+        $contributors[$user]['last_commit'] = $commit['commit_timestamp'];
+        
+        // Calculate delta from previous commit in this project/language
+        if (isset($previousState[$key])) {
+            $contributors[$user]['total_lines_delta'] += ($commit['total_lines'] - $previousState[$key]['total_lines']);
+            $contributors[$user]['code_lines_delta'] += ($commit['code_lines'] - $previousState[$key]['code_lines']);
+            $contributors[$user]['metric_value_delta'] += ($commit['metric_value'] - $previousState[$key]['metric_value']);
+        } else {
+            // First commit for this project/language - count all lines as added
+            $contributors[$user]['total_lines_delta'] += $commit['total_lines'];
+            $contributors[$user]['code_lines_delta'] += $commit['code_lines'];
+            $contributors[$user]['metric_value_delta'] += $commit['metric_value'];
+        }
+        
+        // Update state for next iteration
+        $previousState[$key] = [
+            'total_lines' => $commit['total_lines'],
+            'code_lines' => $commit['code_lines'],
+            'metric_value' => $commit['metric_value']
+        ];
     }
-    $languages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Convert to array and add counts
+    $contributors = array_values($contributors);
+    foreach ($contributors as &$contrib) {
+        $contrib['commit_count'] = count($contrib['commits']);  // Count unique commits
+        $contrib['project_count'] = count($contrib['projects']);
+        unset($contrib['commits']);  // Don't need this in output
+        unset($contrib['projects']);
+    }
+    
+    // Sort by the selected metric
+    if ($selectedMetric === 'total_lines') {
+        usort($contributors, function($a, $b) {
+            return $b['total_lines_delta'] - $a['total_lines_delta'];
+        });
+    } else {
+        usort($contributors, function($a, $b) {
+            return $b['metric_value_delta'] - $a['metric_value_delta'];
+        });
+    }
 }
 catch (PDOException $e)
 {
     die("Database error: " . $e->getMessage());
 }
 
-
 // Calculate totals
 $totals = [
-    'total_lines' => 0,
-    'code_lines' => 0,
-    'metric_value' => 0,
-    'comment_lines' => 0,
-    'blank_lines' => 0
+    'total_lines_delta' => 0,
+    'code_lines_delta' => 0,
+    'metric_value_delta' => 0,
+    'commit_count' => 0,
+    'project_count' => 0
 ];
 
-foreach ($languages as $lang) 
-{
-    $totals['total_lines'] += $lang['total_lines'];
-    $totals['comment_lines'] += $lang['total_comment_lines'];
-    $totals['blank_lines'] += $lang['total_blank_lines'];
+foreach ($contributors as $contrib) {
+    $totals['commit_count'] += $contrib['commit_count'];
     
-    if ($selectedMetric === 'total_lines')
-        $totals['code_lines'] += $lang['code_lines'];
-    else
-        $totals['metric_value'] += $lang['metric_value'];
+    if ($selectedMetric === 'total_lines') {
+        $totals['total_lines_delta'] += $contrib['total_lines_delta'];
+        $totals['code_lines_delta'] += $contrib['code_lines_delta'];
+    } else {
+        $totals['total_lines_delta'] += $contrib['total_lines_delta'];
+        $totals['metric_value_delta'] += $contrib['metric_value_delta'];
+    }
 }
 
-$primaryLanguage = !empty($languages) ? $languages[0]['language'] : 'PHP';
-$estimateBase = $selectedMetric === 'total_lines' ? $totals['code_lines'] : $totals['metric_value'];
+// Get unique project count
+$stmt = $pdo->query("SELECT COUNT(DISTINCT id) as count FROM {$config['tables']['projects']}");
+$totals['project_count'] = $stmt->fetchColumn();
+
+$primaryLanguage = 'PHP'; // Default for estimation
+$estimateBase = $selectedMetric === 'total_lines' ? $totals['code_lines_delta'] : $totals['metric_value_delta'];
 $estimates = $estimateBase > 0 ? generateEstimates($estimateBase, $primaryLanguage) : null;
 $hourlyRate = 75;
 $hoursPerMonth = 160;
@@ -113,7 +158,7 @@ $hoursPerMonth = 160;
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Languages - CodePhacts</title>
+    <title>Contributors - CodePhacts</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -217,59 +262,61 @@ $hoursPerMonth = 160;
         </div>
 
         <div class="card">
-            <h2>Language Statistics</h2>
-            <p>Code statistics across all projects, by programming language.</p>
+            <h2>Contributor Statistics</h2>
+            <p>Code statistics across all projects, by contributor. Line counts show net changes (deltas) contributed.</p>
 
-            <?php if (empty($languages)): ?>
-                <p>No language data available yet.</p>
+            <?php if (empty($contributors)): ?>
+                <p>No contributor data available yet.</p>
             <?php else: ?>
                 <table>
                     <thead>
                         <tr>
-                            <th>Language</th>
+                            <th>Contributor</th>
+                            <th>Commits</th>
                             <th>Projects</th>
-                            <th>Total Lines</th>
+                            <th>Total Lines (Δ)</th>
                             <?php if ($selectedMetric === 'total_lines'): ?>
-                                <th>Code Lines</th>
+                                <th>Code Lines (Δ)</th>
                             <?php else: ?>
-                                <th><?= htmlspecialchars($metricConfig['label']) ?></th>
+                                <th><?= htmlspecialchars($metricConfig['label']) ?> (Δ)</th>
                             <?php endif; ?>
-                            <th>Comment Lines</th>
-                            <th>Blank Lines</th>
+                            <th>First Commit</th>
+                            <th>Last Commit</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($languages as $lang): ?>
+                        <?php foreach ($contributors as $contrib): ?>
                             <tr>
-                                <td><strong><?= htmlspecialchars($lang['language']) ?></strong></td>
-                                <td><?= $lang['project_count'] ?></td>
-                                <td><?= number_format($lang['total_lines'] ?? 0) ?></td>
+                                <td><strong><?= htmlspecialchars($contrib['contributor']) ?></strong></td>
+                                <td><?= number_format($contrib['commit_count']) ?></td>
+                                <td><?= $contrib['project_count'] ?></td>
+                                <td><?= number_format($contrib['total_lines_delta'] ?? 0) ?></td>
                                 <?php if ($selectedMetric === 'total_lines'): ?>
-                                    <td><?= number_format($lang['code_lines'] ?? 0) ?></td>
+                                    <td><?= number_format($contrib['code_lines_delta'] ?? 0) ?></td>
                                 <?php else: ?>
-                                    <td><?= number_format($lang['metric_value'] ?? 0) ?></td>
+                                    <td><?= number_format($contrib['metric_value_delta'] ?? 0) ?></td>
                                 <?php endif; ?>
-                                <td><?= number_format($lang['total_comment_lines'] ?? 0) ?></td>
-                                <td><?= number_format($lang['total_blank_lines'] ?? 0) ?></td>
+                                <td><?= htmlspecialchars(date('Y-m-d', strtotime($contrib['first_commit']))) ?></td>
+                                <td><?= htmlspecialchars(date('Y-m-d', strtotime($contrib['last_commit']))) ?></td>
                             </tr>
                         <?php endforeach; ?>
                         <tr style="font-weight: bold; border-top: 2px solid #dee2e6;">
                             <td>Total</td>
-                            <td><?= count($languages) ?> languages</td>
-                            <td><?= number_format($totals['total_lines']) ?></td>
+                            <td><?= number_format($totals['commit_count']) ?></td>
+                            <td><?= $totals['project_count'] ?> projects</td>
+                            <td><?= number_format($totals['total_lines_delta']) ?></td>
                             <?php if ($selectedMetric === 'total_lines'): ?>
-                                <td><?= number_format($totals['code_lines']) ?></td>
+                                <td><?= number_format($totals['code_lines_delta']) ?></td>
                             <?php else: ?>
-                                <td><?= number_format($totals['metric_value']) ?></td>
+                                <td><?= number_format($totals['metric_value_delta']) ?></td>
                             <?php endif; ?>
-                            <td><?= number_format($totals['comment_lines']) ?></td>
-                            <td><?= number_format($totals['blank_lines']) ?></td>
+                            <td colspan="2"></td>
                         </tr>
                     </tbody>
                 </table>
 
                 <div class="chart-container">
-                    <canvas id="languageChart"></canvas>
+                    <canvas id="contributorChart"></canvas>
                 </div>
             <?php endif; ?>
         </div>
@@ -510,7 +557,7 @@ $hoursPerMonth = 160;
 
             <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-left: 4px solid #007bff; border-radius: 4px;">
                 <p style="margin: 0; font-size: 0.9em;">
-                    <strong>Note:</strong> These portfolio-wide estimates represent the aggregate value of all projects combined. Individual project estimates may vary based on specific technologies and complexity.
+                    <strong>Note:</strong> These portfolio-wide estimates represent the aggregate value of all contributors combined. Individual contributor statistics may vary based on specific roles and project involvement.
                 </p>
             </div>
         </div>
@@ -518,20 +565,20 @@ $hoursPerMonth = 160;
     </div>
 
     <script>
-    <?php if (!empty($languages)): ?>
-    const ctx = document.getElementById('languageChart');
+    <?php if (!empty($contributors)): ?>
+    const ctx = document.getElementById('contributorChart');
     new Chart(ctx,
     {
         type: 'pie',
         data: {
-            labels: <?= json_encode(array_column($languages, 'language')) ?>,
+            labels: <?= json_encode(array_column($contributors, 'contributor')) ?>,
             datasets: [{
-                label: '<?= htmlspecialchars($metricConfig['label']) ?>',
+                label: '<?= htmlspecialchars($metricConfig['label']) ?> (Δ)',
                 data: <?php 
                     if ($selectedMetric === 'total_lines') {
-                        echo json_encode(array_column($languages, 'code_lines'));
+                        echo json_encode(array_column($contributors, 'code_lines_delta'));
                     } else {
-                        echo json_encode(array_column($languages, 'metric_value'));
+                        echo json_encode(array_column($contributors, 'metric_value_delta'));
                     }
                 ?>,
                 backgroundColor: [
