@@ -723,6 +723,12 @@ try
     $totalCommits = 0;
     while ($workFound) 
     {
+        if (is_file(__DIR__ . '/abort.txt'))
+        {
+            unlink(__DIR__ . '/abort.txt');
+            outputProgress('all_complete', "Aborted.");
+            break;
+        }
         $loopCount++;
         $workFound = false;
         outputProgress('loop_start', "Starting processing loop #{$loopCount}");
