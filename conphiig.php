@@ -15,7 +15,7 @@
    limitations under the License.
 */
 /**
- * config.php
+ * conphig.php
  */
 
 return [

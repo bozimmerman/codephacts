@@ -17,7 +17,7 @@
 /**
  * project processing
  */
-$config = require 'config.php';
+$config = require 'conphig.php';
 require_once __DIR__ . '/db.php';
 while (ob_get_level()) {
     ob_end_clean();

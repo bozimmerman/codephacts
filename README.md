@@ -33,7 +33,7 @@ cost models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
 
 1. **Clone or download** the CodePhacts repository to your web server directory
 
-2. **Configure the application** by editing `config.php`:
+2. **Configure the application** by editing `conphig.php`:
 ```php
    return [
        // IMPORTANT: Change this password immediately!
@@ -71,7 +71,7 @@ cost models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
 ```bash
    chmod 755 admin/
    chmod 755 public/
-   chmod 644 config.php
+   chmod 644 conphig.php
 ```
 
 4. **Configure your web server** to point to the CodePhacts directory. The application entry point is `index.php`, which redirects to `public/index.php`.
@@ -82,14 +82,14 @@ cost models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
 
 ### Admin Password
 
-**CRITICAL**: Change the default admin password in `config.php` before deploying:
+**CRITICAL**: Change the default admin password in `conphig.php` before deploying:
 ```php
 'admin_password' => 'YourSecurePasswordHere123!',
 ```
 
 ### Database Configuration
 
-Update the database credentials in `config.php`:
+Update the database credentials in `conphig.php`:
 ```php
     'db' => [
         'type'     => 'sqlite', // sqlite or mysql
@@ -244,7 +244,7 @@ codephacts/
 │   ├── python.php
 │   └── ...
 ├── images/             # Logo and assets
-├── config.php          # Configuration file
+├── conphig.php          # Configuration file
 ├── phactor.php         # Main processing script
 ├── schema.sql          # Database schema
 └── index.php           # Entry point (redirects to public/)
@@ -252,8 +252,8 @@ codephacts/
 
 ## Security Considerations
 
-1. **Change the default admin password** immediately in `config.php`
-2. Protect `config.php` from web access (use `.htaccess` or server config)
+1. **Change the default admin password** immediately in `conphig.php`
+2. Protect `conphig.php` from web access (use `.htaccess` or server config)
 3. Run `phactor.php` via command line with appropriate system user permissions
 4. Use HTTPS in production environments
 5. Restrict database user permissions to only the `codephacts` database
@@ -268,7 +268,7 @@ codephacts/
 - For private repos, configure SSH keys or credentials
 
 ### "Database error" messages
-- Verify database credentials in `config.php`
+- Verify database credentials in `conphig.php`
 - Ensure MySQL/MariaDB is running
 - Check that the `codephacts` database exists
 - Verify user has appropriate permissions

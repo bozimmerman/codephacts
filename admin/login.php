@@ -16,7 +16,7 @@
  */
 session_start();
 
-$config = require __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'config.php';
+$config = require __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'conphig.php';
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password']))
