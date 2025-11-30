@@ -52,7 +52,7 @@ try
         $manager = trim($_POST['manager']);
         $auth_type = $_POST['auth_type'];
         $auth_username = trim($_POST['auth_username']);
-        $auth_password = trim($_POST['auth_password']);
+        $auth_password = ($auth_type === 'basic') ? trim($_POST['auth_basic_password'] ?? '') : trim($_POST['auth_ssh_passphrase'] ?? '');
         $auth_ssh_key_path = trim($_POST['auth_ssh_key_path']);
         
         if (empty($name) || empty($source_url))
@@ -157,7 +157,7 @@ catch (PDOException $e)
                     <input type="text" name="auth_username" id="auth_username" value="<?= htmlspecialchars($project['auth_username'] ?? '') ?>" placeholder="username">
                     
                     <label>Password / Personal Access Token</label>
-                    <input type="password" name="auth_password" id="auth_password" value="<?= htmlspecialchars($project['auth_password'] ?? '') ?>" placeholder="password or token">
+                    <input type="password" name="auth_basic_password" id="auth_password" value="<?= htmlspecialchars($project['auth_password'] ?? '') ?>" placeholder="password or token">
                     <small style="color: #6c757d;">Note: Stored in plaintext. Use personal access tokens when possible.</small>
                 </div>
                 
@@ -167,7 +167,7 @@ catch (PDOException $e)
                     <small style="color: #6c757d;">Full path to SSH private key file on server.</small>
                     
                     <label>SSH Key Passphrase (optional)</label>
-                    <input type="password" name="auth_password" id="ssh_passphrase" value="<?= htmlspecialchars($project['auth_password'] ?? '') ?>" placeholder="passphrase if key is encrypted">
+                    <input type="password" name="auth_ssh_passphrase" id="ssh_passphrase" value="<?= htmlspecialchars($project['auth_password'] ?? '') ?>" placeholder="passphrase if key is encrypted">
                 </div>
 
                 <div style="margin-top: 20px;">

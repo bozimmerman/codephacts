@@ -1,7 +1,7 @@
 # CodePhacts
 
-A code statistics and project estimation web app that tracks lines of code, languages, 
-commits, and generates fun cost estimates across multiple programming languages.
+A source code statistics and project estimation web app that tracks lines of code, languages, 
+commits, contributors, and generates fun cost estimates across multiple programming languages.
 
 ## Overview
 
@@ -21,14 +21,13 @@ cost models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
 
 ![Screenshot of project page](images/Screenshot1.png)
 
-
 ## Installation
 
 ### Prerequisites
 
 - PHP 7.4 or higher
 - Git and/or SVN command-line tools (depending on your repositories)
-- Web server (Apache, Nginx, or similar)
+- Web server (Caddy, Apache, Nginx, or similar)
 
 ### Setup Steps
 

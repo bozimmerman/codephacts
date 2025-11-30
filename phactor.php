@@ -19,6 +19,12 @@
  */
 $config = require 'config.php';
 require_once __DIR__ . '/db.php';
+while (ob_get_level()) {
+    ob_end_clean();
+}
+@ini_set('output_buffering', 'off');
+@ini_set('implicit_flush', 'on');
+ob_implicit_flush(true);
 
 function outputProgress($type, $message, $data = []) 
 {
@@ -29,21 +35,6 @@ function outputProgress($type, $message, $data = [])
         'timestamp' => date('Y-m-d H:i:s')
     ];
     echo json_encode($progress) . "\n";
-    /*
-    $progressFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phactor_progress.json';
-    $allProgress = [];
-    if (file_exists($progressFile)) {
-        $content = file_get_contents($progressFile);
-        if ($content) {
-            $allProgress = json_decode($content, true);
-            if (!is_array($allProgress)) {
-                $allProgress = [];
-            }
-        }
-    }
-    $allProgress[] = $progress;
-    file_put_contents($progressFile, json_encode($allProgress));
-    */
 }
 
 function canAccessRepo($sourceType, $sourceUrl, $authType = 'none', $authUsername = null, $authPassword = null, $authSshKeyPath = null)
@@ -71,7 +62,7 @@ function canAccessRepo($sourceType, $sourceUrl, $authType = 'none', $authUsernam
         $svnVersion = trim(shell_exec('svn --version 2>&1'));
         if (stripos($svnVersion, 'svn, version') === false)
         {
-            outputProgress("error","Cannot access git repo: git isn't installed",[]);
+            outputProgress("error","Cannot access svn repo: svn isn't installed",[]);
             return false;
         }
         $cmd = "svn info " . escapeshellarg($sourceUrl) . " 2>&1";
@@ -112,7 +103,7 @@ function buildAuthenticatedCommand($sourceType, $sourceUrl, $authType, $authUser
         }
         elseif ($authType === 'ssh' && $authSshKeyPath)
         {
-            $sshCommand = 'ssh -i ' . escapeshellarg($authSshKeyPath) . ' -o StrictHostKeyChecking=no';
+            $sshCommand = 'ssh -i ' . escapeshellarg($authSshKeyPath) . ' -o StrictHostKeyChecking=no -o BatchMode=yes';
             if ($authPassword)
                 error_log("WARNING: SSH key passphrase provided but cannot be used non-interactively. Use ssh-agent or remove passphrase.");
             $command = 'GIT_SSH_COMMAND=' . escapeshellarg($sshCommand) . ' ' . $command;
@@ -120,6 +111,7 @@ function buildAuthenticatedCommand($sourceType, $sourceUrl, $authType, $authUser
     }
     elseif ($sourceType === 'svn')
     {
+        $command .= ' --non-interactive --trust-server-cert';
         if ($authType === 'basic' && $authUsername && $authPassword)
         {
             $command .= ' --username ' . escapeshellarg($authUsername) .
@@ -195,6 +187,7 @@ function fetchCommits($sourceType, $sourceUrl, $lastCommit, $authType, $authUser
         if (stripos($output, 'E160006') !== false || stripos($output, 'No such revision') !== false)
         {
             $cmd = "svn log " . escapeshellarg($sourceUrl) . " --limit 100 --xml 2>&1";
+            $cmd = buildAuthenticatedCommand($sourceType, $sourceUrl, $authType, $authUsername, $authPassword, $authSshKeyPath, $cmd);
             $output = shell_exec($cmd);
         }
         if (!$output || (stripos($output, 'E') === 0 && stripos($output, 'E160006') === false))
@@ -311,7 +304,8 @@ function fetchCommitCode($commit, $sourceType, $sourceUrl, $tempDir, $authType, 
     elseif ($sourceType === 'svn')
     {
         $revision = $commit['commit'];
-        $checkoutCmd = "svn checkout " . escapeshellarg($sourceUrl) . " " . escapeshellarg($tempDir) . " -r " . escapeshellarg($revision) . " --quiet 2>&1";
+        $checkoutCmd = "svn export " . escapeshellarg($sourceUrl . '@' . $revision) . " " . escapeshellarg($tempDir) . " --quiet --force 2>&1";
+        $checkoutCmd = buildAuthenticatedCommand($sourceType, $sourceUrl, $authType, $authUsername, $authPassword, $authSshKeyPath, $checkoutCmd);
         $output = shell_exec($checkoutCmd);
         if ($output && (stripos($output, 'E') === 0 || stripos($output, 'svn:') !== false))
         {
