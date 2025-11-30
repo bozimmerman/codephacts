@@ -20,6 +20,7 @@ return [
     'language' => 'go',
     'analyzer' => function(&$stats, $lines)
     {
-        return analyzeCStyleLines($stats, $lines);
+        $WEIGHT = 1.92;
+        return analyzeCStyleLines($stats, $lines, $WEIGHT);
     }
 ];

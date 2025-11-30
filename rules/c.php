@@ -20,6 +20,7 @@ return [
     'language' => 'c',
     'analyzer' => function(&$stats, $lines)
     {
-        return analyzeCStyleLines($stats, $lines);
+        $WEIGHT = 1.00;
+        return analyzeCStyleLines($stats, $lines, $WEIGHT);
     }
 ];

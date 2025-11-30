@@ -20,6 +20,7 @@ return [
     'language' => 'kotlin',
     'analyzer' => function(&$stats, $lines)
     {
-        return analyzeCStyleLines($stats, $lines);
+        $WEIGHT = 2.00;
+        return analyzeCStyleLines($stats, $lines, $WEIGHT);
     }
 ];

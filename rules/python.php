@@ -20,6 +20,7 @@ return [
     'language' => 'python',
     'analyzer' => function(&$stats, $lines) 
     {
+        $WEIGHT = 3.10;
         $inBlockComment = false;
         foreach ($lines as $line) 
         {
@@ -58,8 +59,8 @@ return [
             }
             $statements = substr_count($codePart, ';') + 1; // +1 for the line itself
             $stats['code_statements'] += $statements;
-            $stats['weighted_code_lines'] += 1.0;
-            $stats['weighted_code_statements'] += $statements;
+            $stats['weighted_code_lines'] += $WEIGHT;
+            $stats['weighted_code_statements'] += $statements * $WEIGHT;
         }
         return $stats;
     }

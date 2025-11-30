@@ -20,7 +20,7 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . '_c_style_statements.php';
 
 if (!function_exists('analyzeCStyleLines')) 
 {
-    function analyzeCStyleLines(&$stats, $lines)
+    function analyzeCStyleLines(&$stats, $lines, $WEIGHT)
     {
         $commentState = ['inBlockComment' => false];
         foreach ($lines as $line) 
@@ -41,10 +41,10 @@ if (!function_exists('analyzeCStyleLines'))
             $stats['ncloc']++;
             
             $statements = analyzeCStyleStatements($line);
-            $stats['code_statements'] += max(1, $statements);
-            
-            $stats['weighted_code_lines'] += 1.0;
-            $stats['weighted_code_statements'] += max(1, $statements);
+            $code_statements = max(1, $statements);
+            $stats['code_statements'] += $code_statements;
+            $stats['weighted_code_lines'] += $WEIGHT;
+            $stats['weighted_code_statements'] += $code_statements * $WEIGHT;
         }
         
         return $stats;

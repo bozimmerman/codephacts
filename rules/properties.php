@@ -20,6 +20,7 @@ return [
     'language' => 'properties',
     'analyzer' => function(&$stats, $lines) 
     {
+        $WEIGHT = 5.50;
         foreach ($lines as $line)
         {
             $trimmed = trim($line);
@@ -37,8 +38,8 @@ return [
             //$stats['code_lines']++;
             $stats['ncloc']++;
             $stats['code_statements'] += 1;
-            $stats['weighted_code_lines'] += 1.0;
-            $stats['weighted_code_statements'] += 1.0;
+            //$stats['weighted_code_lines'] += 1.0;
+            $stats['weighted_code_statements'] += $WEIGHT;
         }
     }
 ];

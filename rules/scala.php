@@ -20,6 +20,7 @@ return [
     'language' => 'scala',
     'analyzer' => function(&$stats, $lines)
     {
-        return analyzeCStyleLines($stats, $lines);
+        $WEIGHT = 2.30;
+        return analyzeCStyleLines($stats, $lines, $WEIGHT);
     }
 ];

@@ -20,6 +20,7 @@ return [
     'language' => 'csharp',
     'analyzer' => function(&$stats, $lines)
     {
-        return analyzeCStyleLines($stats, $lines);
+        $WEIGHT = 1.80;
+        return analyzeCStyleLines($stats, $lines, $WEIGHT);
     }
 ];

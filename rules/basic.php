@@ -39,6 +39,7 @@ return [
     },
     'analyzer' => function(&$stats, $lines) 
     {
+        $WEIGHT = 2.20;
         foreach ($lines as $line) 
         {
             $trimmed = trim($line);
@@ -65,8 +66,8 @@ return [
             $cleaned = preg_replace('/"[^"]*"/', '""', $codePart);
             $statements += substr_count($cleaned, ':');
             $stats['code_statements'] += $statements;
-            $stats['weighted_code_lines'] += 1.0;
-            $stats['weighted_code_statements'] += $statements;
+            $stats['weighted_code_lines'] += $WEIGHT;
+            $stats['weighted_code_statements'] += $statements * $WEIGHT;
         }
     }
 ];

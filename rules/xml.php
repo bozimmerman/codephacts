@@ -20,6 +20,7 @@ return [
     'language' => 'xml',
     'analyzer' => function(&$stats, $lines) 
     {
+        $WEIGHT = 3.30;
         $inBlockComment = false;
         foreach ($lines as $line) 
         {
@@ -51,8 +52,8 @@ return [
                 preg_match_all('/<(?!\/)([^>\/]+)(\/?)>/', $line, $matches);
                 $statements = count($matches[0]);
                 $stats['code_statements'] += $statements;
-                $stats['weighted_code_lines'] += 1.0;
-                $stats['weighted_code_statements'] += $statements;
+                //$stats['weighted_code_lines'] += $WEIGHT;
+                $stats['weighted_code_statements'] += $statements * $WEIGHT;
             }
         }
     }

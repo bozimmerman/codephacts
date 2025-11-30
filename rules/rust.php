@@ -20,6 +20,7 @@ return [
     'language' => 'rust',
     'analyzer' => function(&$stats, $lines)
     {
-        return analyzeCStyleLines($stats, $lines);
+        $WEIGHT = 1.45;
+        return analyzeCStyleLines($stats, $lines, $WEIGHT);
     }
 ];

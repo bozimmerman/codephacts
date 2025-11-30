@@ -42,7 +42,7 @@ return [
         }
         $wrappedLines = (int)ceil($totalChars / 80);
         $stats['ncloc'] = $wrappedLines;
-        $stats['weighted_code_lines'] = (float)$wrappedLines;
+        //$stats['weighted_code_lines'] = (float)$wrappedLines;
         $stats['comment_lines'] = 0;
     }
 ];

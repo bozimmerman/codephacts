@@ -47,7 +47,7 @@ return [
         'column' => 'weighted_code_statements',
         'label' => 'Weighted Code Statements',
         'shortLabel' => 'Weighted Stmts',
-        'description' => 'Statements weighted by complexity or importance',
+        'description' => 'Statements weighted by expressiveness',
         'chartColor' => '#6f42c1',
         'yAxisLabel' => 'Weighted Statements',
         'chartTitle' => 'Weighted Statements Over Time'
@@ -56,7 +56,7 @@ return [
         'column' => 'weighted_code_lines',
         'label' => 'Weighted Code Lines',
         'shortLabel' => 'Weighted Lines',
-        'description' => 'Code lines weighted by complexity or importance',
+        'description' => 'Code lines weighted by expressiveness',
         'chartColor' => '#fd7e14',
         'yAxisLabel' => 'Weighted Lines',
         'chartTitle' => 'Weighted Lines Over Time'

@@ -20,6 +20,7 @@ return [
     'language' => 'css',
     'analyzer' => function(&$stats, $lines)
     {
+        $WEIGHT = 1.90;
         $inBlockComment = false;
         foreach ($lines as $line)
         {
@@ -54,6 +55,8 @@ return [
             $stats['ncloc']++;
             $declarations = substr_count($line, ';');
             $stats['code_statements'] += $declarations;
+            //$stats['weighted_code_lines'] += $WEIGHT;
+            $stats['weighted_code_statements'] += $declarations * $WEIGHT;
         }
         return $stats;
     }

@@ -20,6 +20,7 @@ return [
     'language' => 'mobprog',
     'analyzer' => function(&$stats, $lines) 
     {
+        $WEIGHT = 3.50;
         foreach ($lines as $line) 
         {
             $trimmed = trim($line);
@@ -46,8 +47,8 @@ return [
             if (preg_match('/^\w+_PROG/', $trimmed))
                 $statements = 1;
             $stats['code_statements'] += $statements;
-            $stats['weighted_code_lines'] += 1.0;
-            $stats['weighted_code_statements'] += $statements;
+            $stats['weighted_code_lines'] += $WEIGHT;
+            $stats['weighted_code_statements'] += $statements * $WEIGHT;
         }
     }
 ];

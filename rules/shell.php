@@ -20,6 +20,7 @@ return [
     'language' => 'shell',
     'analyzer' => function(&$stats, $lines) 
     {
+        $WEIGHT = 2.90;
         foreach ($lines as $line) 
         {
             $trimmed = trim($line);
@@ -51,9 +52,10 @@ return [
             $statements = 1;
             $statements += substr_count($codePart, ';');
             $statements += substr_count($codePart, '&') - substr_count($codePart, '&&');
-            $stats['code_statements'] += max(1, $statements);
-            $stats['weighted_code_lines'] += 1.0;
-            $stats['weighted_code_statements'] += max(1, $statements);
+            $code_statements = max(1, $statements);
+            $stats['code_statements'] += $code_statements;
+            $stats['weighted_code_lines'] += $WEIGHT;
+            $stats['weighted_code_statements'] += $code_statements * $WEIGHT;
         }
         return $stats;
     }
