@@ -18,12 +18,10 @@ $config = require __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '
 require_once __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '/db.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'estimation_functions.php';
 
-// Load metrics configuration and determine selected metric
 $statsColumnsMap = require __DIR__ . DIRECTORY_SEPARATOR . 'stats_columns_map.php';
 $selectedMetric = isset($_GET['metric']) ? $_GET['metric'] : 'total_lines';
-if (!isset($statsColumnsMap[$selectedMetric])) {
+if (!isset($statsColumnsMap[$selectedMetric]))
     $selectedMetric = 'total_lines';
-}
 $metricConfig = $statsColumnsMap[$selectedMetric];
 $metricColumn = $metricConfig['column'];
 
@@ -31,7 +29,7 @@ try
 {
     $pdo = getDatabase($config);
     
-    // Get all commits ordered by project and timestamp - simple query, no joins
+    // Get all commits ordered by project, language, and timestamp
     $stmt = $pdo->query("
         SELECT
             c.id,
@@ -49,22 +47,23 @@ try
     ");
     $allCommits = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Calculate deltas by iterating through commits in PHP (much faster than SQL subqueries)
+    $selectedContributor = isset($_GET['contributor']) ? $_GET['contributor'] : 'ALL';
     $contributors = [];
-    $previousState = []; // Track [project_id][language] => values
+    $previousState = [];
     
-    foreach ($allCommits as $commit) {
+    foreach ($allCommits as $commit)
+    {
         $user = $commit['commit_user'];
         $projectId = $commit['project_id'];
         $language = $commit['language'];
         $commitId = $commit['id'];
         $key = $projectId . '_' . $language;
         
-        // Initialize contributor if needed
-        if (!isset($contributors[$user])) {
+        if (!isset($contributors[$user]))
+        {
             $contributors[$user] = [
                 'contributor' => $user,
-                'commits' => [],  // Track unique commit IDs
+                'commits' => [],
                 'projects' => [],
                 'total_lines_delta' => 0,
                 'code_lines_delta' => 0,
@@ -74,23 +73,23 @@ try
             ];
         }
         
-        $contributors[$user]['commits'][$commitId] = true;  // Track unique commits
+        $contributors[$user]['commits'][$commitId] = true;
         $contributors[$user]['projects'][$projectId] = true;
         $contributors[$user]['last_commit'] = $commit['commit_timestamp'];
         
-        // Calculate delta from previous commit in this project/language
-        if (isset($previousState[$key])) {
+        if (isset($previousState[$key]))
+        {
             $contributors[$user]['total_lines_delta'] += ($commit['total_lines'] - $previousState[$key]['total_lines']);
             $contributors[$user]['code_lines_delta'] += ($commit['code_lines'] - $previousState[$key]['code_lines']);
             $contributors[$user]['metric_value_delta'] += ($commit['metric_value'] - $previousState[$key]['metric_value']);
-        } else {
-            // First commit for this project/language - count all lines as added
+        }
+        else
+        {
             $contributors[$user]['total_lines_delta'] += $commit['total_lines'];
             $contributors[$user]['code_lines_delta'] += $commit['code_lines'];
             $contributors[$user]['metric_value_delta'] += $commit['metric_value'];
         }
         
-        // Update state for next iteration
         $previousState[$key] = [
             'total_lines' => $commit['total_lines'],
             'code_lines' => $commit['code_lines'],
@@ -100,19 +99,23 @@ try
     
     // Convert to array and add counts
     $contributors = array_values($contributors);
-    foreach ($contributors as &$contrib) {
-        $contrib['commit_count'] = count($contrib['commits']);  // Count unique commits
+    foreach ($contributors as &$contrib)
+    {
+        $contrib['commit_count'] = count($contrib['commits']);
         $contrib['project_count'] = count($contrib['projects']);
-        unset($contrib['commits']);  // Don't need this in output
+        unset($contrib['commits']);
         unset($contrib['projects']);
     }
+    unset($contrib);
     
-    // Sort by the selected metric
-    if ($selectedMetric === 'total_lines') {
+    if ($selectedMetric === 'total_lines') 
+    {
         usort($contributors, function($a, $b) {
             return $b['total_lines_delta'] - $a['total_lines_delta'];
         });
-    } else {
+    } 
+    else
+    {
         usort($contributors, function($a, $b) {
             return $b['metric_value_delta'] - $a['metric_value_delta'];
         });
@@ -132,28 +135,37 @@ $totals = [
     'project_count' => 0
 ];
 
-foreach ($contributors as $contrib) {
+foreach ($contributors as $contrib)
+{
     $totals['commit_count'] += $contrib['commit_count'];
-    
-    if ($selectedMetric === 'total_lines') {
-        $totals['total_lines_delta'] += $contrib['total_lines_delta'];
-        $totals['code_lines_delta'] += $contrib['code_lines_delta'];
-    } else {
-        $totals['total_lines_delta'] += $contrib['total_lines_delta'];
-        $totals['metric_value_delta'] += $contrib['metric_value_delta'];
-    }
+    $totals['total_lines_delta'] += $contrib['total_lines_delta'];
+    $totals['code_lines_delta'] += $contrib['code_lines_delta'];
+    $totals['metric_value_delta'] += $contrib['metric_value_delta'];
 }
 
-// Get unique project count
 $stmt = $pdo->query("SELECT COUNT(DISTINCT id) as count FROM {$config['tables']['projects']}");
 $totals['project_count'] = $stmt->fetchColumn();
 
-$primaryLanguage = 'PHP'; // Default for estimation
-$estimateBase = $selectedMetric === 'total_lines' ? $totals['code_lines_delta'] : $totals['metric_value_delta'];
+$primaryLanguage = 'PHP';
+
+if ($selectedContributor === 'ALL')
+    $estimateBase = $selectedMetric === 'total_lines' ? $totals['code_lines_delta'] : $totals['metric_value_delta'];
+else 
+{
+    $estimateBase = 0;
+    foreach ($contributors as $contrib)
+    {
+        if ($contrib['contributor'] === $selectedContributor)
+        {
+            $estimateBase = $selectedMetric === 'total_lines' ? $contrib['code_lines_delta'] : $contrib['metric_value_delta'];
+            break;
+        }
+    }
+}
+
 $estimates = $estimateBase > 0 ? generateEstimates($estimateBase, $primaryLanguage) : null;
 $hourlyRate = 75;
-$hoursPerMonth = 160;
-?>
+$hoursPerMonth = 160;?>
 <!DOCTYPE html>
 <html>
 <head>
@@ -255,11 +267,22 @@ $hoursPerMonth = 160;
                         </option>
                     <?php endforeach; ?>
                 </select>
+                
+                <label for="contributor" style="margin: 0; font-weight: bold;">Contributor:</label>
+                <select name="contributor" id="contributor" onchange="this.form.submit()" style="width: auto; margin: 0;">
+                    <option value="ALL" <?= $selectedContributor === 'ALL' ? 'selected' : '' ?>>All Contributors</option>
+                    <?php foreach ($contributors as $contrib): ?>
+                        <option value="<?= htmlspecialchars($contrib['contributor']) ?>" 
+                                <?= $selectedContributor === $contrib['contributor'] ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($contrib['contributor']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                
                 <span style="color: #6c757d; font-size: 0.9em;">
                     <?= htmlspecialchars($metricConfig['description']) ?>
                 </span>
             </form>
-        </div>
 
         <div class="card">
             <h2>Contributor Statistics</h2>
@@ -323,9 +346,9 @@ $hoursPerMonth = 160;
 
         <?php if ($estimates !== null): ?>
         <div class="card">
-            <h2>📊 Portfolio-Wide Cost Estimation</h2>
-            <p>Aggregate estimates across all projects based on <strong><?= number_format($estimateBase) ?></strong> <?= $selectedMetric === 'total_lines' ? 'lines of code' : htmlspecialchars(strtolower($metricConfig['label'])) ?> (<?= number_format($estimateBase / 1000, 1) ?> K)</p>
-            
+            <h2>📊 <?= $selectedContributor === 'ALL' ? 'Portfolio-Wide' : htmlspecialchars($selectedContributor) . '\'s' ?> Cost Estimation</h2>
+            <p><?= $selectedContributor === 'ALL' ? 'Aggregate estimates across all projects' : 'Estimates for ' . htmlspecialchars($selectedContributor) ?> 
+            	based on <strong><?= number_format($estimateBase) ?></strong> <?= $selectedMetric === 'total_lines' ? 'lines of code' : htmlspecialchars(strtolower($metricConfig['label'])) ?> (<?= number_format($estimateBase / 1000, 1) ?> K)</p>
             <div class="estimate-grid">
                 <!-- COCOMO -->
                 <div class="estimate-card">
@@ -574,7 +597,7 @@ $hoursPerMonth = 160;
             labels: <?= json_encode(array_column($contributors, 'contributor')) ?>,
             datasets: [{
                 label: '<?= htmlspecialchars($metricConfig['label']) ?> (Δ)',
-                data: <?php 
+                data: <?php
                     if ($selectedMetric === 'total_lines') {
                         echo json_encode(array_column($contributors, 'code_lines_delta'));
                     } else {
