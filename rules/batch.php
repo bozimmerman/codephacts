@@ -1,13 +1,13 @@
 <?php
 /*
  Copyright 2025-2025 Bo Zimmerman
- 
+
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
  You may obtain a copy of the License at
- 
+
  http://www.apache.org/licenses/LICENSE-2.0
- 
+
  Unless required by applicable law or agreed to in writing, software
  distributed under the License is distributed on an "AS IS" BASIS,
  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,21 +15,25 @@
  limitations under the License.
  */
 
+require_once __DIR__ . DIRECTORY_SEPARATOR . '_batch_complexity.php';
+
 return [
     'extensions' => ['bat', 'cmd'],
     'language' => 'batch',
-    'analyzer' => function(&$stats, $lines) 
+    'analyzer' => function(&$stats, $lines)
     {
         $WEIGHT = 1.25;
-        foreach ($lines as $line) 
+        $codeLines = [];
+
+        foreach ($lines as $line)
         {
             $trimmed = trim($line);
-            if (empty($trimmed)) 
+            if (empty($trimmed))
             {
                 $stats['blank_lines']++;
                 continue;
             }
-            if (preg_match('/^(REM|::)/i', $trimmed)) 
+            if (preg_match('/^(REM|::)/i', $trimmed))
             {
                 $stats['comment_lines']++;
                 continue;
@@ -44,6 +48,14 @@ return [
             $stats['code_statements'] += $code_statements;
             $stats['weighted_code_lines'] += $WEIGHT;
             $stats['weighted_code_statements'] += $code_statements * $WEIGHT;
+
+            $codeLines[] = $line;
+        }
+        if (!empty($codeLines)) 
+        {
+            $complexity = analyzeBatchComplexity($codeLines);
+            $stats['cyclomatic_complexity'] = $complexity['cyclomatic'];
+            $stats['cognitive_complexity'] = $complexity['cognitive'];
         }
         return $stats;
     }

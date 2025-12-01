@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS statistics
     comment_lines INT DEFAULT 0,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     ncloc INT DEFAULT 0,
+    cyclomatic_complexity INT DEFAULT 0,
+    cognitive_complexity INT DEFAULT 0,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (commit_id) REFERENCES commits(id) ON DELETE CASCADE,
     UNIQUE(commit_id, language)

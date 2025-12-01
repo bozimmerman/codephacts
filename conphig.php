@@ -21,12 +21,12 @@
 return [
     'admin_password' => 'PASSWORD',  // please change this
     'db' => [
-        'type'     => 'sqlite', // sqlite or mysql
+        'type'     => 'mysql', // sqlite or mysql
         'host'     => 'localhost',        // MySQL host
         'port'     => 3306,               // Optional: MySQL port
         'name'     => 'codephacts',      // Database name
         'user'     => 'root',           // DB username
-        'pass'     => 'secretpassword',   // DB password
+        'pass'     => 'x1',   // DB password
         'charset'  => 'utf8',          // Recommended charset
         'path'     => __DIR__ . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . 'codephacts.db', // sql lite path
     ],

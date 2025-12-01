@@ -69,7 +69,7 @@ try {
     echo json_encode([
         'success' => true,
         'message' => sprintf(
-            'Successfully reset project "%s":\n- Deleted %d commits\n- Deleted %d statistics records',
+            'Successfully reset project "%s, Deleted %d commits and %d statistics records',
             $project['name'],
             $commitCount,
             $statsCount

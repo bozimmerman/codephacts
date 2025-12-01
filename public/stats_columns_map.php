@@ -69,5 +69,23 @@ return [
         'chartColor' => '#20c997',
         'yAxisLabel' => 'NCLOC',
         'chartTitle' => 'NCLOC Lines Over Time'
+    ],
+    'cyclomatic_complexity' => [
+        'column' => 'cyclomatic_complexity',
+        'label' => 'Cyclomatic Complexity',
+        'shortLabel' => 'Cyclomatic',
+        'description' => 'McCabe cyclomatic complexity - measures the number of linearly independent paths through code',
+        'chartColor' => '#dc3545',
+        'yAxisLabel' => 'Cyclomatic Complexity',
+        'chartTitle' => 'Cyclomatic Complexity Over Time'
+    ],
+    'cognitive_complexity' => [
+        'column' => 'cognitive_complexity',
+        'label' => 'Cognitive Complexity',
+        'shortLabel' => 'Cognitive',
+        'description' => 'SonarSource cognitive complexity - measures how difficult code is to understand, with higher weights for nested structures',
+        'chartColor' => '#e83e8c',
+        'yAxisLabel' => 'Cognitive Complexity',
+        'chartTitle' => 'Cognitive Complexity Over Time'
     ]
 ];

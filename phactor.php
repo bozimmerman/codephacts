@@ -307,7 +307,7 @@ function fetchCommitCode($commit, $sourceType, $sourceUrl, $tempDir, $authType, 
     elseif ($sourceType === 'svn')
     {
         $revision = $commit['commit'];
-        $checkoutCmd = "svn export " . escapeshellarg($sourceUrl . '@' . $revision) . " " . escapeshellarg($tempDir) . " --quiet --force 2>&1";
+        $checkoutCmd = "svn export " . escapeshellarg($sourceUrl) . ' -r ' . escapeshellarg($revision) . " " . escapeshellarg($tempDir) . " --quiet --force 2>&1";
         $checkoutCmd = buildAuthenticatedCommand($sourceType, $sourceUrl, $authType, $authUsername, $authPassword, $authSshKeyPath, $checkoutCmd);
         $output = shell_exec($checkoutCmd);
         if ($output && (stripos($output, 'E') === 0 || stripos($output, 'svn:') !== false))
@@ -420,6 +420,8 @@ function processFile($filePath, $ext, &$report)
                 'blank_lines' => 0,
                 'comment_lines' => 0,
                 'ncloc' => 0,
+                'cyclomatic_complexity' => 0,
+                'cognitive_complexity' => 0,
             ];
         foreach ($stats as $key => $value)
             $report[$lang][$key] += $value;
@@ -437,7 +439,9 @@ function analyzeFile($ruleInfo, $lines)
         'weighted_code_lines' => 0,
         'blank_lines' => 0,
         'comment_lines' => 0,
-        'ncloc' => 0
+        'ncloc' => 0,
+        'cyclomatic_complexity' => 0,
+        'cognitive_complexity' => 0
     ];
     $ruleInfo['analyzer']($stats, $lines);
     if (isset($config['not_code_lines'])
@@ -484,7 +488,9 @@ function updateStatistics($projectId, $commitId, $report)
                 'weighted_code_lines' => 0,
                 'blank_lines' => 0,
                 'comment_lines' => 0,
-                'ncloc' => 0
+                'ncloc' => 0,
+                'cyclomatic_complexity' => 0,
+                'cognitive_complexity' => 0
             ]
         ];
     }
@@ -494,8 +500,9 @@ function updateStatistics($projectId, $commitId, $report)
         $stmt = $pdo->prepare("
             INSERT INTO `$statsTable`
             (project_id, commit_id, language, total_lines, code_lines, code_statements,
-             weighted_code_statements, weighted_code_lines, blank_lines, comment_lines, updated_at, ncloc)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)
+             weighted_code_statements, weighted_code_lines, blank_lines, comment_lines, updated_at, ncloc,
+             cyclomatic_complexity, cognitive_complexity)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)
             ON DUPLICATE KEY UPDATE
             total_lines = VALUES(total_lines),
             code_lines = VALUES(code_lines),
@@ -505,7 +512,9 @@ function updateStatistics($projectId, $commitId, $report)
             blank_lines = VALUES(blank_lines),
             comment_lines = VALUES(comment_lines),
             updated_at = NOW(),
-            ncloc = VALUES(ncloc)
+            ncloc = VALUES(ncloc),
+            cyclomatic_complexity = VALUES(cyclomatic_complexity),
+            cognitive_complexity = VALUES(cognitive_complexity)
         ");
         
         $stmt->execute([
@@ -519,7 +528,9 @@ function updateStatistics($projectId, $commitId, $report)
             $stats['weighted_code_lines'],
             $stats['blank_lines'],
             $stats['comment_lines'],
-            $stats['ncloc']
+            $stats['ncloc'],
+            isset($stats['cyclomatic_complexity']) ? $stats['cyclomatic_complexity'] : 0,
+            isset($stats['cognitive_complexity']) ? $stats['cognitive_complexity'] : 0
         ]);
     }
 }

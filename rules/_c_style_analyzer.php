@@ -17,16 +17,19 @@
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . '_c_style_comments.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . '_c_style_statements.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . '_c_style_complexity.php';
 
 if (!function_exists('analyzeCStyleLines')) 
 {
     function analyzeCStyleLines(&$stats, $lines, $WEIGHT)
     {
         $commentState = ['inBlockComment' => false];
-        foreach ($lines as $line) 
+        $codeLines = []; // Collect code lines for complexity analysis
+
+        foreach ($lines as $line)
         {
             $trimmed = trim($line);
-            if (empty($trimmed)) 
+            if (empty($trimmed))
             {
                 $stats['blank_lines']++;
                 continue;
@@ -39,14 +42,22 @@ if (!function_exists('analyzeCStyleLines'))
             }
             $stats['code_lines']++;
             $stats['ncloc']++;
-            
+
             $statements = analyzeCStyleStatements($line);
             $code_statements = max(1, $statements);
             $stats['code_statements'] += $code_statements;
             $stats['weighted_code_lines'] += $WEIGHT;
             $stats['weighted_code_statements'] += $code_statements * $WEIGHT;
+            $codeLines[] = $line;
         }
-        
+
+        if (!empty($codeLines)) 
+        {
+            $complexity = analyzeCStyleComplexity($codeLines);
+            $stats['cyclomatic_complexity'] = $complexity['cyclomatic'];
+            $stats['cognitive_complexity'] = $complexity['cognitive'];
+        }
+
         return $stats;
     }
 }
