@@ -1,14 +1,7 @@
+Add little project image for overview and project page, and description for project page
 Date range selector for all charts (not just query page) -- maybe drag click mouse over chart dates to change date range.
 Language filter on project page to see only specific languages
-Contributor filter (if commit_user data is rich enough)
 Branch comparison -- heck, just supporting multiple branches for git!
-Batch re-process ability for individual projects/branches
-
-In phactor.php and rules:
-2. Add complexity number(s) to the statistics table for every commit
-3. Add to each appropriate rule the ability to return complexity number(s) for each file analyzed
-4. Add some way to average or sum or otherwise combine complexity number(s) to come with with complexity number(s) for each commit language
-5. Go back and add this info to public project page on the summary chart for each language
 
 New chart types to consider:
 - Heatmap showing commit activity by day/week/month
@@ -17,31 +10,7 @@ New chart types to consider:
 - Velocity chart showing rate of code change over time
 - Technical debt estimation chart (comment ratio, complexity trends)
 
-Complexity suggestions:
-cyclomatic_complexity FLOAT DEFAULT 0,
-cognitive_complexity FLOAT DEFAULT 0,
-halstead_difficulty FLOAT DEFAULT 0,
-halstead_volume FLOAT DEFAULT 0,
-maintainability_index FLOAT DEFAULT 0,
-max_nesting_depth INT DEFAULT 0,
-avg_function_length FLOAT DEFAULT 0
-Per commit:
-- Average complexity across all files
-- Weighted average (by file size)
-- Percentile values (p50, p95, p99)
-- Max complexity (hotspot identification)
-- Complexity density (complexity per KLOC)
-
-Per project:
-- Complexity trend over time
-- Complexity by language
-- Complexity distribution histogram
-- Industry standard benchmarks (complexity vs avg project, etc)
-- Add project description field
-
-
 Add health score:
-// Calculate overall health score
 $healthScore = (
     ($commentRatio * 0.2) +           // Documentation
     (1 / ($avgComplexity / 10) * 0.3) + // Simplicity
