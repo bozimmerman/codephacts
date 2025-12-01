@@ -27,7 +27,11 @@ while (ob_get_level()) {
 ob_implicit_flush(true);
 @ini_set('zlib.output_compression', 0);
 @ini_set('implicit_flush', 1);
+header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-cache, no-store, must-revalidate');
+header('Transfer-Encoding: chunked');
+echo str_repeat(' ', 79);
+echo "\n";
 
 function outputProgress($type, $message, $data = []) 
 {
