@@ -781,8 +781,6 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         </div>
     </div>
 
-<pre><?php var_dump($allCommits); ?></pre>
-<pre><?php var_dump($groupedData); ?></pre>
 <script>
 	const commits = <?= json_encode($allCommits) ?>;
 <?php if (!empty($allCommits) && count($allCommits) >= 1): ?>
