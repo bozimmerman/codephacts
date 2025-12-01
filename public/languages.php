@@ -25,6 +25,8 @@ if (!isset($statsColumnsMap[$selectedMetric])) {
 }
 $metricConfig = $statsColumnsMap[$selectedMetric];
 $metricColumn = $metricConfig['column'];
+if (!preg_match('/^[a-z_]+$/', $metricColumn))
+    die('Invalid metric');
 
 try
 {

@@ -24,7 +24,8 @@ if (!isset($statsColumnsMap[$selectedMetric]))
     $selectedMetric = 'total_lines';
 $metricConfig = $statsColumnsMap[$selectedMetric];
 $metricColumn = $metricConfig['column'];
-
+if (!preg_match('/^[a-z_]+$/', $metricColumn))
+    die('Invalid metric');
 try
 {
     $pdo = getDatabase($config);
