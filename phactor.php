@@ -730,14 +730,22 @@ try
 {
     $pdo = getDatabase($config);
     $projectsTable = $config['tables']['projects'];
-    $completedProjects = [];
+    $stmt = $pdo->prepare("
+        SELECT id, name, source_type, source_url, last_commit, excluded_dirs,
+               auth_type, auth_username, auth_password, auth_ssh_key_path
+        FROM `$projectsTable`
+        ORDER BY id ASC
+    ");
+    $stmt->execute();
+    $projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
     $workFound = true;
     $loopCount = 0;
     $cache = [];
     $processedCount = 0;
     $totalCommits = 0;
     $abortFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'codephacts_abort_' . md5(__DIR__) . '.txt';
-    while ($workFound) 
+    while ($workFound && (!empty($projects))) 
     {
         if (is_file($abortFile))
         {
@@ -748,14 +756,6 @@ try
         $loopCount++;
         $workFound = false;
         outputProgress('loop_start', "Starting processing loop #{$loopCount}");
-        $stmt = $pdo->prepare("
-            SELECT id, name, source_type, source_url, last_commit, excluded_dirs,
-                   auth_type, auth_username, auth_password, auth_ssh_key_path
-            FROM `$projectsTable`
-            ORDER BY id ASC
-        ");
-        $stmt->execute();
-        $projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
         $cacheSize = 0;
         foreach ($projects as $project)
         {
@@ -764,10 +764,8 @@ try
         }
         $totalCommits = max($totalCommits, $processedCount + $cacheSize);
         
-        foreach ($projects as $project) 
+        foreach ($projects as $key => $project) 
         {
-            if (in_array($project['id'], $completedProjects))
-                continue;
             $currentCommit = $processedCount + 1;
             try
             {
@@ -777,14 +775,13 @@ try
                     $workFound = true;
                 }
                 else
-                    $completedProjects[] = $project['id'];
+                    unset($projects[$key]);
             }
             catch (Exception $e) 
             {
                 $msg = "Error processing {$project['name']}: {$e->getMessage()}";
-                if ($e instanceof PDOException) {
+                if ($e instanceof PDOException)
                     $msg .= "\nSQL: " . ($stmt->queryString ?? 'unknown');
-                }
                 error_log($msg);
                 outputProgress('error', "Error: {$e->getMessage()}");
             }
