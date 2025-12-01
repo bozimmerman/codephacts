@@ -261,15 +261,6 @@ $hoursPerMonth = 160;?>
         <div class="card">
             <h2>📊 View Metrics</h2>
             <form method="GET" style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
-                <label for="metric" style="margin: 0; font-weight: bold;">Select Metric:</label>
-                <select name="metric" id="metric" onchange="this.form.submit()" style="width: auto; margin: 0;">
-                    <?php foreach ($statsColumnsMap as $key => $config): ?>
-                        <option value="<?= $key ?>" <?= $selectedMetric === $key ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($config['label']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-                
                 <label for="contributor" style="margin: 0; font-weight: bold;">Contributor:</label>
                 <select name="contributor" id="contributor" onchange="this.form.submit()" style="width: auto; margin: 0;">
                     <option value="ALL" <?= $selectedContributor === 'ALL' ? 'selected' : '' ?>>All Contributors</option>
@@ -280,7 +271,14 @@ $hoursPerMonth = 160;?>
                         </option>
                     <?php endforeach; ?>
                 </select>
-                
+                <label for="metric" style="margin: 0; font-weight: bold;">Select Metric:</label>
+                <select name="metric" id="metric" onchange="this.form.submit()" style="width: auto; margin: 0;">
+                    <?php foreach ($statsColumnsMap as $key => $config): ?>
+                        <option value="<?= $key ?>" <?= $selectedMetric === $key ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($config['label']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
                 <span style="color: #6c757d; font-size: 0.9em;">
                     <?= htmlspecialchars($metricConfig['description']) ?>
                 </span>
