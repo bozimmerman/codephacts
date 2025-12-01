@@ -28,8 +28,6 @@ $metricColumn = $metricConfig['column'];
 try
 {
     $pdo = getDatabase($config);
-    
-    // Get all commits ordered by project, language, and timestamp
     $stmt = $pdo->query("
         SELECT
             c.id,
@@ -50,6 +48,7 @@ try
     $selectedContributor = isset($_GET['contributor']) ? $_GET['contributor'] : 'ALL';
     $contributors = [];
     $previousState = [];
+    $allProjects = [];
     
     foreach ($allCommits as $commit)
     {
@@ -72,32 +71,32 @@ try
                 'last_commit' => $commit['commit_timestamp']
             ];
         }
-        
-        $contributors[$user]['commits'][$commitId] = true;
-        $contributors[$user]['projects'][$projectId] = true;
-        $contributors[$user]['last_commit'] = $commit['commit_timestamp'];
-        
-        if (isset($previousState[$key]))
+        if (($selectedContributor == 'ALL') || ($selectedContributor == $user))
         {
-            $contributors[$user]['total_lines_delta'] += ($commit['total_lines'] - $previousState[$key]['total_lines']);
-            $contributors[$user]['code_lines_delta'] += ($commit['code_lines'] - $previousState[$key]['code_lines']);
-            $contributors[$user]['metric_value_delta'] += ($commit['metric_value'] - $previousState[$key]['metric_value']);
+            $allProjects[$projectId] = true;
+            $contributors[$user]['commits'][$commitId] = true;
+            $contributors[$user]['projects'][$projectId] = true;
+            $contributors[$user]['last_commit'] = $commit['commit_timestamp'];
+            
+            if (isset($previousState[$key]))
+            {
+                $contributors[$user]['total_lines_delta'] += ($commit['total_lines'] - $previousState[$key]['total_lines']);
+                $contributors[$user]['code_lines_delta'] += ($commit['code_lines'] - $previousState[$key]['code_lines']);
+                $contributors[$user]['metric_value_delta'] += ($commit['metric_value'] - $previousState[$key]['metric_value']);
+            }
+            else
+            {
+                $contributors[$user]['total_lines_delta'] += $commit['total_lines'];
+                $contributors[$user]['code_lines_delta'] += $commit['code_lines'];
+                $contributors[$user]['metric_value_delta'] += $commit['metric_value'];
+            }
         }
-        else
-        {
-            $contributors[$user]['total_lines_delta'] += $commit['total_lines'];
-            $contributors[$user]['code_lines_delta'] += $commit['code_lines'];
-            $contributors[$user]['metric_value_delta'] += $commit['metric_value'];
-        }
-        
         $previousState[$key] = [
             'total_lines' => $commit['total_lines'],
             'code_lines' => $commit['code_lines'],
             'metric_value' => $commit['metric_value']
         ];
     }
-    
-    // Convert to array and add counts
     $contributors = array_values($contributors);
     foreach ($contributors as &$contrib)
     {
@@ -126,7 +125,6 @@ catch (PDOException $e)
     die("Database error: " . $e->getMessage());
 }
 
-// Calculate totals
 $totals = [
     'total_lines_delta' => 0,
     'code_lines_delta' => 0,
@@ -143,8 +141,7 @@ foreach ($contributors as $contrib)
     $totals['metric_value_delta'] += $contrib['metric_value_delta'];
 }
 
-$stmt = $pdo->query("SELECT COUNT(DISTINCT id) as count FROM {$config['tables']['projects']}");
-$totals['project_count'] = $stmt->fetchColumn();
+$totals['project_count'] = count($allProjects);
 
 $primaryLanguage = 'PHP';
 
@@ -309,6 +306,7 @@ $hoursPerMonth = 160;?>
                     </thead>
                     <tbody>
                         <?php foreach ($contributors as $contrib): ?>
+                            <?php if (($selectedContributor == 'ALL') || ($selectedContributor == $contrib['contributor'])): ?>
                             <tr>
                                 <td><strong><?= htmlspecialchars($contrib['contributor']) ?></strong></td>
                                 <td><?= number_format($contrib['commit_count']) ?></td>
@@ -322,6 +320,7 @@ $hoursPerMonth = 160;?>
                                 <td><?= htmlspecialchars(date('Y-m-d', strtotime($contrib['first_commit']))) ?></td>
                                 <td><?= htmlspecialchars(date('Y-m-d', strtotime($contrib['last_commit']))) ?></td>
                             </tr>
+                            <?php endif; ?>
                         <?php endforeach; ?>
                         <tr style="font-weight: bold; border-top: 2px solid #dee2e6;">
                             <td>Total</td>
