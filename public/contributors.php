@@ -77,8 +77,12 @@ try
             $allProjects[$projectId] = true;
             $contributors[$user]['commits'][$commitId] = true;
             $contributors[$user]['projects'][$projectId] = true;
-            $contributors[$user]['last_commit'] = $commit['commit_timestamp'];
-            
+            if ($commit['commit_timestamp'] < $contributors[$user]['first_commit'])
+                $contributors[$user]['first_commit'] = $commit['commit_timestamp'];
+            if ($commit['commit_timestamp'] > $contributors[$user]['last_commit'])
+                $contributors[$user]['last_commit'] = $commit['commit_timestamp'];
+                    
+                
             if (isset($previousState[$key]))
             {
                 $contributors[$user]['total_lines_delta'] += ($commit['total_lines'] - $previousState[$key]['total_lines']);
