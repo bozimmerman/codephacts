@@ -192,6 +192,18 @@ php /path/to/codephacts/phactor.php
 - Apply date ranges for historical analysis
 - Export results for reporting
 
+## Supported Languages
+
+CodePhacts analyzes 30+ programming languages:
+
+**Compiled**: C, C++, C#, Java, Kotlin, Rust, Go, Swift, Scala, Dart  
+**Scripting**: PHP, Python, JavaScript, TypeScript, Ruby, Shell, Batch  
+**Assembly**: x86, ARM, 6502, and other assembly dialects  
+**Markup**: HTML, XML, CSS, JSON  
+**Legacy**: BASIC, Visual Basic
+**Configuration**: Properties, INI files  
+**Specialized**: QuestMaker scripts, MobProg scripts
+
 ## Cost Estimation Models
 
 CodePhacts provides five cost estimation models:
@@ -217,17 +229,36 @@ Each model provides:
 - **Team Size** (average people)
 - **Cost Estimate** (at $75/hour by default)
 
-## Supported Languages
+## Code Complexity Metrics
 
-CodePhacts analyzes 30+ programming languages:
+CodePhacts tracks two complementary complexity metrics for code quality analysis:
 
-**Compiled**: C, C++, C#, Java, Kotlin, Rust, Go, Swift, Scala, Dart  
-**Scripting**: PHP, Python, JavaScript, TypeScript, Ruby, Shell, Batch  
-**Assembly**: x86, ARM, 6502, and other assembly dialects  
-**Markup**: HTML, XML, CSS, JSON  
-**Legacy**: BASIC, Visual Basic
-**Configuration**: Properties, INI files  
-**Specialized**: QuestMaker scripts, MobProg scripts
+### Cyclomatic Complexity
+McCabe's cyclomatic complexity measures the number of linearly independent paths through code by counting 
+decision points (if statements, loops, case statements, logical operators). Higher values indicate more 
+complex control flow and more test cases needed for full coverage.
+
+### Cognitive Complexity
+SonarSource's cognitive complexity measures how difficult code is to understand by assigning higher weights to 
+nested control structures. Unlike cyclomatic complexity, it penalizes deeply nested logic more heavily, better 
+reflecting the mental effort required to comprehend code.
+
+## Code Weighting System
+
+### Weighted Lines of Code
+CodePhacts applies language-specific multipliers to raw line counts to normalize code volume across different 
+programming paradigms. For example, assembly code (0.80×) requires more lines to achieve the same functionality 
+as Python (3.10×), while high-level languages like Scala (2.30×) accomplish more per line than C (1.00×, baseline).
+
+### Weighted Code Statements
+Statement counts are multiplied by the same language-specific factors to measure actual executable logic rather 
+than physical lines. This accounts for languages where multiple statements can appear on one line or where single 
+statements span multiple lines, providing a more accurate measure of code complexity than raw line counts.
+
+### QSM Effective Size
+The weighted metrics approximate QSM (Quantitative Software Management) effective size calculations, which normalize 
+code volume across languages for more accurate effort estimation. These weights are derived from empirical studies 
+of language expressiveness and productivity factors.
 
 ## Directory Structure
 ```

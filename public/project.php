@@ -57,24 +57,51 @@ try
         ORDER BY s.total_lines DESC
         ");
     } 
-    else 
+    else
     {
-        $stmt = $pdo->prepare("
-        SELECT
-            s.language,
-            s.total_lines,
-            s.{$metricColumn} as metric_value,
-            s.comment_lines,
-            s.blank_lines
-        FROM {$config['tables']['statistics']} s
-        INNER JOIN (
-            SELECT MAX(commit_id) as max_commit_id
-            FROM {$config['tables']['statistics']}
-            WHERE project_id = ?
-        ) latest ON s.commit_id = latest.max_commit_id
-        WHERE s.project_id = ?
-        ORDER BY s.{$metricColumn} DESC
-        ");
+        $isComplexityMetric = in_array($selectedMetric, ['cyclomatic_complexity', 'cognitive_complexity']);
+        if ($isComplexityMetric) 
+        {
+            $stmt = $pdo->prepare("
+            SELECT
+                s.language,
+                s.total_lines,
+                CASE
+                    WHEN s.code_lines > 0 THEN
+                        (s.{$metricColumn} / (s.code_lines / 1000.0))
+                    ELSE 0
+                END as metric_value,
+                s.comment_lines,
+                s.blank_lines
+            FROM {$config['tables']['statistics']} s
+            INNER JOIN (
+                SELECT MAX(commit_id) as max_commit_id
+                FROM {$config['tables']['statistics']}
+                WHERE project_id = ?
+            ) latest ON s.commit_id = latest.max_commit_id
+            WHERE s.project_id = ?
+            ORDER BY metric_value DESC
+            ");
+        }
+        else
+        {
+            $stmt = $pdo->prepare("
+            SELECT
+                s.language,
+                s.total_lines,
+                s.{$metricColumn} as metric_value,
+                s.comment_lines,
+                s.blank_lines
+            FROM {$config['tables']['statistics']} s
+            INNER JOIN (
+                SELECT MAX(commit_id) as max_commit_id
+                FROM {$config['tables']['statistics']}
+                WHERE project_id = ?
+            ) latest ON s.commit_id = latest.max_commit_id
+            WHERE s.project_id = ?
+            ORDER BY s.{$metricColumn} DESC
+            ");
+        }
     }
     $stmt->execute([$projectId, $projectId]);
     $languages = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -98,17 +125,39 @@ try
             $totals['metric_value'] += $lang['metric_value'];
     }
     
-    $stmt = $pdo->prepare("
-    SELECT
-        c.commit_hash,
-        c.commit_timestamp,
-        SUM(s.{$metricColumn}) as metric_value
-    FROM {$config['tables']['commits']} c
-    INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
-    WHERE c.project_id = ?
-    GROUP BY c.id, c.commit_hash, c.commit_timestamp
-    ORDER BY c.commit_timestamp ASC
-    ");
+    $isComplexityMetric = in_array($selectedMetric, ['cyclomatic_complexity', 'cognitive_complexity']);
+    if ($isComplexityMetric) 
+    {
+        $stmt = $pdo->prepare("
+        SELECT
+            c.commit_hash,
+            c.commit_timestamp,
+            CASE
+                WHEN SUM(s.code_lines) > 0 THEN
+                    (SUM(s.{$metricColumn}) / (SUM(s.code_lines) / 1000.0))
+                ELSE 0
+            END as metric_value
+        FROM {$config['tables']['commits']} c
+        INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+        WHERE c.project_id = ?
+        GROUP BY c.id, c.commit_hash, c.commit_timestamp
+        ORDER BY c.commit_timestamp ASC
+        ");
+    }
+    else
+    {
+        $stmt = $pdo->prepare("
+        SELECT
+            c.commit_hash,
+            c.commit_timestamp,
+            SUM(s.{$metricColumn}) as metric_value
+        FROM {$config['tables']['commits']} c
+        INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+        WHERE c.project_id = ?
+        GROUP BY c.id, c.commit_hash, c.commit_timestamp
+        ORDER BY c.commit_timestamp ASC
+        ");
+    }
     $stmt->execute([$projectId]);
     $allCommits = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
@@ -434,11 +483,14 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         </div>
         <?php endif; ?>
 
-        <?php if ($estimateBase > 0): ?>
+        <?php 
+        $locBasedMetrics = ['total_lines', 'code_lines', 'ncloc', 'code_statements', 'weighted_code_statements', 'weighted_code_lines'];
+        $showCostEstimation = in_array($selectedMetric, $locBasedMetrics) && $estimateBase > 0;
+        if ($showCostEstimation): 
+        ?>
         <div class="card">
             <h2>📊 Project Cost Estimation Models</h2>
             <p>Based on <strong><?= number_format($estimateBase) ?></strong> <?= $selectedMetric === 'total_lines' ? 'lines of code' : htmlspecialchars(strtolower($metricConfig['label'])) ?> (<?= number_format($estimateBase / 1000, 1) ?> K)</p>
-            
             <div class="estimate-grid">
                 <!-- COCOMO -->
                 <div class="estimate-card">

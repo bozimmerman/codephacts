@@ -74,7 +74,7 @@ return [
         'column' => 'cyclomatic_complexity',
         'label' => 'Cyclomatic Complexity',
         'shortLabel' => 'Cyclomatic',
-        'description' => 'McCabe cyclomatic complexity - measures the number of linearly independent paths through code',
+        'description' => 'McCabe cyclomatic complexity - measures the number of linearly independent paths through 1000 code lines',
         'chartColor' => '#dc3545',
         'yAxisLabel' => 'Cyclomatic Complexity',
         'chartTitle' => 'Cyclomatic Complexity Over Time'
@@ -83,7 +83,7 @@ return [
         'column' => 'cognitive_complexity',
         'label' => 'Cognitive Complexity',
         'shortLabel' => 'Cognitive',
-        'description' => 'SonarSource cognitive complexity - measures how difficult code is to understand, with higher weights for nested structures',
+        'description' => 'SonarSource cognitive complexity - measures how difficult code is to understand, with higher weights for nested structures per 1000 code lines',
         'chartColor' => '#e83e8c',
         'yAxisLabel' => 'Cognitive Complexity',
         'chartTitle' => 'Cognitive Complexity Over Time'
