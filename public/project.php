@@ -120,7 +120,11 @@ try
         $totals['comment_lines'] += $lang['comment_lines'];
         $totals['blank_lines'] += $lang['blank_lines'];
         if ($selectedMetric === 'total_lines')
+        {
+            $lang['metric_value'] = $lang['total_lines'];
+            $totals['metric_value'] += $lang['total_lines'];
             $totals['code_lines'] += $lang['code_lines'];
+        }
         else
             $totals['metric_value'] += $lang['metric_value'];
     }
@@ -455,7 +459,14 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
             <?php endif; ?>
         </div>
         
-        <?php if (!empty($allCommits) && count($allCommits) > 1): ?>
+        <div class="card">
+            <h2>Code Composition Analysis</h2>
+            <div class="chart-container" style="height: 300px;">
+                <canvas id="compositionChart"></canvas>
+            </div>
+        </div>
+        
+        <?php if (!empty($allCommits) && count($allCommits) >= 1): ?>
         <div class="card">
             <h2><?= htmlspecialchars($metricConfig['chartTitle']) ?> - Changes Per Interval</h2>
             <div class="chart-container" style="height: 300px;">
@@ -468,13 +479,6 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                 <canvas id="totalLinesChart"></canvas>
             </div>
         </div>
-        <div class="card">
-            <h2>Code Composition Analysis</h2>
-            <div class="chart-container" style="height: 300px;">
-                <canvas id="compositionChart"></canvas>
-            </div>
-        </div>
-        
         <div class="card">
             <h2>Commit Activity Over Time</h2>
             <div class="chart-container" style="height: 300px;">
@@ -777,9 +781,11 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         </div>
     </div>
 
-    <script>
-    <?php if (!empty($allCommits) && count($allCommits) > 1): ?>
-    const commits = <?= json_encode($allCommits) ?>;
+<pre><?php var_dump($allCommits); ?></pre>
+<pre><?php var_dump($groupedData); ?></pre>
+<script>
+	const commits = <?= json_encode($allCommits) ?>;
+<?php if (!empty($allCommits) && count($allCommits) >= 1): ?>
     const commitData = {
         labels: <?= json_encode($groupedData['labels']) ?>,
         changes: <?= json_encode($groupedData['changes']) ?>,
@@ -936,16 +942,16 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
     {
         type: 'line',
         data: {
-            labels: totalLinesLabels,
+            labels: totalLinesData.length === 1 ? [0, 1, 2] : totalLinesLabels,
             datasets: [{
                 label: '<?= htmlspecialchars($metricConfig['label']) ?>',
-                data: totalLinesData,
+                data: totalLinesData.length === 1 ? [{x: 1, y: totalLinesData[0]}] : totalLinesData,
                 borderColor: '<?= $metricConfig['chartColor'] ?>',
                 backgroundColor: '<?= $metricConfig['chartColor'] ?>33',
                 borderWidth: 2,
                 fill: true,
                 tension: 0.1,
-                pointRadius: 0,
+                pointRadius: totalLinesData.length === 1 ? 5 : 0,
                 pointHoverRadius: 4
             }]
         },
@@ -966,14 +972,25 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                     }
                 },
                 x: {
-                    title: {
-                        display: true,
-                        text: 'Commit Date'
+                    <?php if (count($allCommits) === 1): ?>
+                    type: 'linear',
+                    min: 0,
+                    max: 2,
+                    ticks: {
+                        callback: function(value, index) {
+                            return index === 1 ? totalLinesLabels[0] : '';
+                        }
                     },
+                    <?php else: ?>
                     ticks: {
                         maxTicksLimit: 20,
                         maxRotation: 45,
                         minRotation: 45
+                    },
+                    <?php endif; ?>
+                    title: {
+                        display: true,
+                        text: 'Commit Date'
                     }
                 }
             },
