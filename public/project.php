@@ -754,7 +754,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                             <tr>
                                 <td><?= htmlspecialchars(substr($commit['commit_hash'], 0, 10)) ?></td>
                                 <td><?= htmlspecialchars($commit['commit_user'] ?? 'None') ?></td>
-                                <td><?= htmlspecialchars($commit['commit_timestamp']) ?></td>
+                                <td><?= htmlspecialchars((new DateTime($commit['commit_timestamp']))->format('Y-m-d H:i')) ?></td>
                                 <td><?= number_format($commit['metric_value'] ?? 0) ?></td>
                             </tr>
                         <?php endforeach; ?>
