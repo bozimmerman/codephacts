@@ -61,7 +61,7 @@ try
     } 
     else
     {
-        $isComplexityMetric = in_array($selectedMetric, ['cyclomatic_complexity', 'cognitive_complexity', 'num_files']);
+        $isComplexityMetric = in_array($selectedMetric, ['cyclomatic_complexity', 'cognitive_complexity']);
         if ($isComplexityMetric) 
         {
             $stmt = $pdo->prepare("
@@ -131,7 +131,7 @@ try
             $totals['metric_value'] += $lang['metric_value'];
     }
     
-    $isComplexityMetric = in_array($selectedMetric, ['cyclomatic_complexity', 'cognitive_complexity', 'num_files']);
+    $isComplexityMetric = in_array($selectedMetric, ['cyclomatic_complexity', 'cognitive_complexity']);
     if ($isComplexityMetric) 
     {
         $stmt = $pdo->prepare("
