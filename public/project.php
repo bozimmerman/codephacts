@@ -61,7 +61,7 @@ try
     } 
     else
     {
-        $isComplexityMetric = in_array($selectedMetric, ['cyclomatic_complexity', 'cognitive_complexity']);
+        $isComplexityMetric = in_array($selectedMetric, ['cyclomatic_complexity', 'cognitive_complexity', 'num_files']);
         if ($isComplexityMetric) 
         {
             $stmt = $pdo->prepare("
@@ -131,7 +131,7 @@ try
             $totals['metric_value'] += $lang['metric_value'];
     }
     
-    $isComplexityMetric = in_array($selectedMetric, ['cyclomatic_complexity', 'cognitive_complexity']);
+    $isComplexityMetric = in_array($selectedMetric, ['cyclomatic_complexity', 'cognitive_complexity', 'num_files']);
     if ($isComplexityMetric) 
     {
         $stmt = $pdo->prepare("
@@ -514,7 +514,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         <?php endif; ?>
 
         <?php 
-        $locBasedMetrics = ['total_lines', 'code_lines', 'ncloc', 'code_statements', 'weighted_code_statements', 'weighted_code_lines'];
+        $locBasedMetrics = ['total_lines', 'code_lines', 'ncloc', 'code_statements', 'weighted_code_statements', 'weighted_code_lines', 'num_files'];
         $showCostEstimation = in_array($selectedMetric, $locBasedMetrics) && $estimateBase > 0;
         if ($showCostEstimation): 
         ?>

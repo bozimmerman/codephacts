@@ -1,9 +1,7 @@
 Total lines should have overlap for comments and blank lines on line change chart
-Add little project image for overview and project page, and description for project page
 Project breakdown per contributor (perhaps "project" drop down on contributors page? defaults 'All', but if given, data is limited)
 Date range selector for all charts (not just query page) -- maybe drag click mouse over chart dates to change date range.
 Language filter on project page to see only specific languages
-Branch comparison -- heck, just supporting multiple branches for git!
 
 New chart types to consider:
 - Heatmap showing commit activity by day/week/month
@@ -19,14 +17,14 @@ $healthScore = (
     ($testCoverage * 0.3) +            // Testing (if tracked)
     ($consistencyScore * 0.2)          // Consistency metrics
 ) * 100;
-
+consistencyScore = (
+    namingConventionAdherence +  // % of identifiers following your conventions
+    styleGuideAdherence +         // % matching checkstyle/formatter rules
+    patternConsistency +          // Similar structures using similar approaches
+    documentationUniformity       // All similar elements documented similarly
+) / 4
 Export to CSV: Add export button to any table
-Keyboard shortcuts: 'r' to refresh, 'h' to go home, etc.
 Dark mode: Toggle for the interface
-Recent activity feed: Show last 10 updates across all projects
-Favorites: Star important projects for quick access
-Tags: Categorize projects (production, experimental, archived)
-Notes: Add markdown notes to projects
 Alerts: Email/Slack when update completes
 Mobile responsive: Make it work well on phones
 Breadcrumbs: Better navigation trail

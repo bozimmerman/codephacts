@@ -10,13 +10,14 @@ using five different cost models: COCOMO, COCOMO II, Function Point Analysis, SL
 
 - **Multi-Language Support**: Analyzes 30+ programming languages including Java, C/C++, Python, JavaScript, PHP, Assembly, and more
 - **Repository Integration**: Direct integration with Git and SVN repositories
-- **Historical Tracking**: Tracks code evolution through commits and code lines over time
+- **Historical Tracking**: Tracks code evolution through commits, files, and code lines over time
 - **Cost Estimation Models**: Five estimation models with comparative analysis
 - **Visual Analytics**: Interactive charts showing code growth, composition, and commit activity
 - **Project Management**: Multi-project support with individual statistics and reporting
 - **Flexible Exclusions**: Configurable directory exclusions (e.g., `node_modules`, `vendor`)
-- **Code Complexity**: Show Cognitive and Cyclomatic complexity by language and graphed.
-- **Code Weights**: Show weighted lines of code, and weighted code 'statement' charts and graphs.
+- **Code Complexity**: Show Cognitive and Cyclomatic complexity by language and graphed
+- **Code Weights**: Show weighted lines of code, and weighted code 'statement' charts and graphs
+- **Contributors**: Show commits and code statistics broken down by various contributors
 ![Screenshot of project page](images/Screenshot1.png)
 
 ## Installation

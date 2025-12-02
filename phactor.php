@@ -435,6 +435,7 @@ function processFile($filePath, $ext, &$report)
                 'ncloc' => 0,
                 'cyclomatic_complexity' => 0,
                 'cognitive_complexity' => 0,
+                'num_files' => 0,
             ];
         foreach ($stats as $key => $value)
             $report[$lang][$key] += $value;
@@ -454,7 +455,8 @@ function analyzeFile($ruleInfo, $lines)
         'comment_lines' => 0,
         'ncloc' => 0,
         'cyclomatic_complexity' => 0,
-        'cognitive_complexity' => 0
+        'cognitive_complexity' => 0,
+        'num_files' => 1
     ];
     $ruleInfo['analyzer']($stats, $lines);
     if (isset($config['not_code_lines'])
@@ -503,7 +505,8 @@ function updateStatistics($projectId, $commitId, $report)
                 'comment_lines' => 0,
                 'ncloc' => 0,
                 'cyclomatic_complexity' => 0,
-                'cognitive_complexity' => 0
+                'cognitive_complexity' => 0,
+                'num_files' => 0
             ]
         ];
     }
@@ -514,8 +517,8 @@ function updateStatistics($projectId, $commitId, $report)
             INSERT INTO `$statsTable`
             (project_id, commit_id, language, total_lines, code_lines, code_statements,
              weighted_code_statements, weighted_code_lines, blank_lines, comment_lines, updated_at, ncloc,
-             cyclomatic_complexity, cognitive_complexity)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)
+             cyclomatic_complexity, cognitive_complexity, num_files)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
             total_lines = VALUES(total_lines),
             code_lines = VALUES(code_lines),
@@ -527,7 +530,8 @@ function updateStatistics($projectId, $commitId, $report)
             updated_at = NOW(),
             ncloc = VALUES(ncloc),
             cyclomatic_complexity = VALUES(cyclomatic_complexity),
-            cognitive_complexity = VALUES(cognitive_complexity)
+            cognitive_complexity = VALUES(cognitive_complexity),
+            num_files = VALUES(num_files)
         ");
         
         $stmt->execute([
@@ -543,7 +547,8 @@ function updateStatistics($projectId, $commitId, $report)
             $stats['comment_lines'],
             $stats['ncloc'],
             isset($stats['cyclomatic_complexity']) ? $stats['cyclomatic_complexity'] : 0,
-            isset($stats['cognitive_complexity']) ? $stats['cognitive_complexity'] : 0
+            isset($stats['cognitive_complexity']) ? $stats['cognitive_complexity'] : 0,
+            $stats['num_files']
         ]);
     }
 }

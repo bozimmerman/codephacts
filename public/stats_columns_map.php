@@ -87,5 +87,14 @@ return [
         'chartColor' => '#e83e8c',
         'yAxisLabel' => 'Cognitive Complexity',
         'chartTitle' => 'Cognitive Complexity Over Time'
-    ]
+    ],
+    'num_files' => [
+        'column' => 'num_files',
+        'label' => 'Number of Files',
+        'shortLabel' => 'Files',
+        'description' => 'Counts the total number of files',
+        'chartColor' => '#20c997',
+        'yAxisLabel' => 'Files',
+        'chartTitle' => 'Number of Files Over Time'
+    ],
 ];
