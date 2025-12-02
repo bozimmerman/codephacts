@@ -63,7 +63,7 @@ catch (PDOException $e)
     <style>
         .project-card-with-image {
             display: grid;
-            grid-template-columns: 80px 1fr;
+            grid-template-columns: 1fr 80px;
             gap: 15px;
             align-items: start;
         }
@@ -126,7 +126,6 @@ catch (PDOException $e)
                         <div class="project-card">
                             <?php if (!empty($project['image'])): ?>
                                 <div class="project-card-with-image">
-                                    <img src="../data/project_images/<?= htmlspecialchars($project['image']) ?>" alt="<?= htmlspecialchars($project['name']) ?>" class="project-image">
                                     <div class="project-content">
                                         <h3><?= htmlspecialchars($project['name']) ?></h3>
                                         <div class="meta">
@@ -138,6 +137,7 @@ catch (PDOException $e)
                                             <a href="project.php?id=<?= $project['id'] ?>" class="button">View Details</a>
                                         </div>
                                     </div>
+                                    <img src="../data/project_images/<?= htmlspecialchars($project['image']) ?>" alt="<?= htmlspecialchars($project['name']) ?>" class="project-image">
                                 </div>
                             <?php else: ?>
                                 <h3><?= htmlspecialchars($project['name']) ?></h3>

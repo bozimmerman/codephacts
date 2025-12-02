@@ -41,7 +41,7 @@ try
             s.{$metricColumn} as metric_value
         FROM {$config['tables']['commits']} c
         INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
-        WHERE c.commit_user IS NOT NULL AND c.commit_user != ''
+        WHERE c.commit_user IS NOT NULL AND c.commit_user != '' AND c.processing_state = 'done'
         ORDER BY c.project_id, s.language, c.commit_timestamp ASC
     ");
     $allCommits = $stmt->fetchAll(PDO::FETCH_ASSOC);

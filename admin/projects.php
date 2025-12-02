@@ -83,7 +83,7 @@ catch (PDOException $e)
                         <th>Name</th>
                         <th>Type</th>
                         <th>URL</th>
-                        <th>Last Commit</th>
+                        <th>Last Updated</th>
                         <th>Excluded Dirs</th>
                         <th>Actions</th>
                     </tr>
@@ -101,7 +101,7 @@ catch (PDOException $e)
                                 <td><strong><?= htmlspecialchars($project['name']) ?></strong></td>
                                 <td><?= htmlspecialchars($project['source_type']) ?></td>
                                 <td style="font-size: 0.85em; color: #6c757d;"><?= htmlspecialchars($project['source_url']) ?></td>
-                                <td><?= htmlspecialchars($project['last_commit'] ? $project['last_commit'] : 'None') ?></td>
+                                <td><?= $project['last_updated'] ? date('Y-m-d', strtotime($project['last_updated'])) : 'Never' ?></td>
                                 <td style="font-size: 0.85em;"><?= htmlspecialchars($project['excluded_dirs'] ? $project['excluded_dirs'] : 'None') ?></td>
                                 <td class="actions">
                                     <a href="edit-project.php?id=<?= $project['id'] ?>" class="button">Edit</a>
