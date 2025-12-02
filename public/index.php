@@ -17,24 +17,26 @@
 $config = require __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'conphig.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '/db.php';
 
-try 
+try
 {
     $pdo = getDatabase($config);
     $stmt = $pdo->query("
-        SELECT 
+        SELECT
             p.id,
             p.name,
             p.source_type,
+            p.image,
+            p.description,
             COUNT(DISTINCT c.id) as commit_count,
             MAX(c.commit_timestamp) as last_commit_date
         FROM {$config['tables']['projects']} p
         LEFT JOIN {$config['tables']['commits']} c ON p.id = c.project_id
-        GROUP BY p.id, p.name, p.source_type
+        GROUP BY p.id, p.name, p.source_type, p.image, p.description
         ORDER BY p.name ASC
     ");
     $projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $pdo->query("
-        SELECT 
+        SELECT
             SUM(s.code_lines) as total_code_lines,
             SUM(s.comment_lines) as total_comment_lines,
             COUNT(DISTINCT s.language) as language_count
@@ -46,8 +48,8 @@ try
         ) latest ON s.project_id = latest.project_id AND s.commit_id = latest.max_commit_id
     ");
     $totals = $stmt->fetch(PDO::FETCH_ASSOC);
-} 
-catch (PDOException $e) 
+}
+catch (PDOException $e)
 {
     die("Database error: " . $e->getMessage());
 }
@@ -58,6 +60,23 @@ catch (PDOException $e)
     <meta charset="utf-8">
     <title>CodePhacts - Code Statistics Tracker</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        .project-card-with-image {
+            display: grid;
+            grid-template-columns: 80px 1fr;
+            gap: 15px;
+            align-items: start;
+        }
+        .project-image {
+            width: 80px;
+            height: 80px;
+            object-fit: contain;
+            border-radius: 4px;
+        }
+        .project-content {
+            flex: 1;
+        }
+    </style>
 </head>
 <body>
     <header>
@@ -105,15 +124,32 @@ catch (PDOException $e)
                 <div class="project-list">
                     <?php foreach ($projects as $project): ?>
                         <div class="project-card">
-                            <h3><?= htmlspecialchars($project['name']) ?></h3>
-                            <div class="meta">
-                                <strong>Type:</strong> <?= htmlspecialchars($project['source_type']) ?><br>
-                                <strong>Commits:</strong> <?= $project['commit_count'] ?><br>
-                                <strong>Last Updated:</strong> <?= $project['last_commit_date'] ? htmlspecialchars($project['last_commit_date']) : 'Never' ?>
-                            </div>
-                            <div class="actions">
-                                <a href="project.php?id=<?= $project['id'] ?>" class="button">View Details</a>
-                            </div>
+                            <?php if (!empty($project['image'])): ?>
+                                <div class="project-card-with-image">
+                                    <img src="../data/project_images/<?= htmlspecialchars($project['image']) ?>" alt="<?= htmlspecialchars($project['name']) ?>" class="project-image">
+                                    <div class="project-content">
+                                        <h3><?= htmlspecialchars($project['name']) ?></h3>
+                                        <div class="meta">
+                                            <strong>Type:</strong> <?= htmlspecialchars($project['source_type']) ?><br>
+                                            <strong>Commits:</strong> <?= $project['commit_count'] ?><br>
+                                            <strong>Last Updated:</strong> <?= $project['last_commit_date'] ? htmlspecialchars($project['last_commit_date']) : 'Never' ?>
+                                        </div>
+                                        <div class="actions">
+                                            <a href="project.php?id=<?= $project['id'] ?>" class="button">View Details</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php else: ?>
+                                <h3><?= htmlspecialchars($project['name']) ?></h3>
+                                <div class="meta">
+                                    <strong>Type:</strong> <?= htmlspecialchars($project['source_type']) ?><br>
+                                    <strong>Commits:</strong> <?= $project['commit_count'] ?><br>
+                                    <strong>Last Updated:</strong> <?= $project['last_commit_date'] ? htmlspecialchars($project['last_commit_date']) : 'Never' ?>
+                                </div>
+                                <div class="actions">
+                                    <a href="project.php?id=<?= $project['id'] ?>" class="button">View Details</a>
+                                </div>
+                            <?php endif; ?>
                         </div>
                     <?php endforeach; ?>
                 </div>

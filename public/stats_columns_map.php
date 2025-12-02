@@ -20,7 +20,7 @@ return [
         'column' => 'total_lines',
         'label' => 'Total Lines',
         'shortLabel' => 'Total',
-        'description' => 'All lines in the file including code, comments, and blank lines',
+        'description' => 'All lines in the file including code, text, comments, and blank lines',
         'chartColor' => '#007bff',
         'yAxisLabel' => 'Total Lines',
         'chartTitle' => 'Total Lines Over Time'
@@ -47,7 +47,7 @@ return [
         'column' => 'weighted_code_statements',
         'label' => 'Weighted Code Statements',
         'shortLabel' => 'Weighted Stmts',
-        'description' => 'Statements weighted by expressiveness',
+        'description' => 'Statements weighted by language expressiveness',
         'chartColor' => '#6f42c1',
         'yAxisLabel' => 'Weighted Statements',
         'chartTitle' => 'Weighted Statements Over Time'
@@ -56,14 +56,14 @@ return [
         'column' => 'weighted_code_lines',
         'label' => 'Weighted Code Lines',
         'shortLabel' => 'Weighted Lines',
-        'description' => 'Code lines weighted by expressiveness',
+        'description' => 'Code lines weighted by language expressiveness',
         'chartColor' => '#fd7e14',
         'yAxisLabel' => 'Weighted Lines',
         'chartTitle' => 'Weighted Lines Over Time'
     ],
     'ncloc' => [
         'column' => 'ncloc',
-        'label' => 'Non-Comment Lines of Code',
+        'label' => 'Non-Comment Lines',
         'shortLabel' => 'NCLOC',
         'description' => 'Physical lines that are not comments or blank (industry standard metric)',
         'chartColor' => '#20c997',

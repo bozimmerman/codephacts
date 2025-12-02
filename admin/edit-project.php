@@ -29,12 +29,19 @@ $project = [
     'auth_type' => 'none',
     'auth_username' => '',
     'auth_password' => '',
-    'auth_ssh_key_path' => ''
+    'auth_ssh_key_path' => '',
+    'image' => '',
+    'description' => ''
 ];
+
+$imagesDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . 'project_images';
+if (!is_dir($imagesDir))
+    mkdir($imagesDir, 0755, true);
 
 try
 {
-    $pdo = getDatabase($config);$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo = getDatabase($config);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     if (isset($_GET['id']))
     {
         $stmt = $pdo->prepare("SELECT * FROM {$config['tables']['projects']} WHERE id = ?");
@@ -50,45 +57,77 @@ try
         $source_url = trim($_POST['source_url']);
         $excluded_dirs = trim($_POST['excluded_dirs']);
         $manager = trim($_POST['manager']);
+        $description = trim($_POST['description'] ?? '');
         $auth_type = $_POST['auth_type'];
         $auth_username = trim($_POST['auth_username']);
         $auth_password = ($auth_type === 'basic') ? trim($_POST['auth_basic_password'] ?? '') : trim($_POST['auth_ssh_passphrase'] ?? '');
         $auth_ssh_key_path = trim($_POST['auth_ssh_key_path']);
+        $image = $project['image'] ?? '';
+        
+        if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) 
+        {
+            $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            $fileType = $_FILES['image']['type'];
+            if (in_array($fileType, $allowedTypes)) 
+            {
+                if (!empty($project['image'])) 
+                {
+                    $oldImagePath = $imagesDir . DIRECTORY_SEPARATOR . $project['image'];
+                    if (file_exists($oldImagePath))
+                        unlink($oldImagePath);
+                }
+                $extension = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
+                $image = 'project_' . ($project['id'] ?? 'new_' . time()) . '_' . uniqid() . '.' . $extension;
+                $targetPath = $imagesDir . DIRECTORY_SEPARATOR . $image;
+                if (!move_uploaded_file($_FILES['image']['tmp_name'], $targetPath))
+                    $error = "Failed to upload image";
+            } 
+            else
+                $error = "Invalid image type. Please upload JPG, PNG, GIF, or WebP";
+        }
+        if (isset($_POST['delete_image']) && $_POST['delete_image'] === '1' && !empty($project['image'])) 
+        {
+            $oldImagePath = $imagesDir . DIRECTORY_SEPARATOR . $project['image'];
+            if (file_exists($oldImagePath))
+                unlink($oldImagePath);
+            $image = '';
+        }
         
         if (empty($name) || empty($source_url))
             $error = "Name and URL are required";
-        else 
+        elseif (!$error)
         {
-            if ($project['id']) 
+            if ($project['id'])
             {
                 $stmt = $pdo->prepare("
-                    UPDATE {$config['tables']['projects']} 
+                    UPDATE {$config['tables']['projects']}
                     SET name = ?, source_type = ?, source_url = ?, excluded_dirs = ?, manager = ?,
-                        auth_type = ?, auth_username = ?, auth_password = ?, auth_ssh_key_path = ?
+                        auth_type = ?, auth_username = ?, auth_password = ?, auth_ssh_key_path = ?,
+                        image = ?, description = ?
                     WHERE id = ?
                 ");
                 $stmt->execute([$name, $source_type, $source_url, $excluded_dirs, $manager,
-                    $auth_type, $auth_username, $auth_password, $auth_ssh_key_path, $project['id']]);
+                    $auth_type, $auth_username, $auth_password, $auth_ssh_key_path,
+                    $image, $description, $project['id']]);
                 $message = "Project updated successfully";
-            } 
-            else 
+            }
+            else
             {
                 $stmt = $pdo->prepare("
                     INSERT INTO {$config['tables']['projects']} (name, source_type, source_url, excluded_dirs, manager,
-                                auth_type, auth_username, auth_password, auth_ssh_key_path) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                auth_type, auth_username, auth_password, auth_ssh_key_path, image, description)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $stmt->execute([$name, $source_type, $source_url, $excluded_dirs, $manager,
-                    $auth_type, $auth_username, $auth_password, $auth_ssh_key_path]);
+                    $auth_type, $auth_username, $auth_password, $auth_ssh_key_path, $image, $description]);
                 $message = "Project added successfully";
             }
             header('Location: projects.php');
             exit;
         }
     }
-    
-} 
-catch (PDOException $e) 
+}
+catch (PDOException $e)
 {
     $error = "Database error: " . $e->getMessage();
 }
@@ -99,6 +138,19 @@ catch (PDOException $e)
     <meta charset="utf-8">
     <title><?= $project['id'] ? 'Edit' : 'Add' ?> Project - CodePhacts</title>
     <link rel="stylesheet" href="../public/style.css">
+    <style>
+        .image-preview {
+            margin: 10px 0;
+            max-width: 200px;
+            max-height: 200px;
+        }
+        .image-preview img {
+            max-width: 100%;
+            max-height: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
 </head>
 <body>
     <header>
@@ -129,9 +181,26 @@ catch (PDOException $e)
         <div class="card">
             <h2><?= $project['id'] ? 'Edit' : 'Add New' ?> Project</h2>
             
-            <form method="POST">
+            <form method="POST" enctype="multipart/form-data">
                 <label>Project Name *</label>
                 <input type="text" name="name" value="<?= htmlspecialchars($project['name']) ?>" required>
+                
+                <label>Project Description</label>
+                <input type="text" name="description" value="<?= htmlspecialchars($project['description'] ?? '') ?>" placeholder="Brief one-line description of the project" maxlength="500">
+                <small style="color: #6c757d;">A brief description that will appear on the project details page</small>
+                
+                <label>Project Image</label>
+                <?php if (!empty($project['image'])): ?>
+                    <div class="image-preview">
+                        <img src="../data/project_images/<?= htmlspecialchars($project['image']) ?>" alt="Project image">
+                    </div>
+                    <label style="font-weight: normal;">
+                        <input type="checkbox" name="delete_image" value="1">
+                        Delete current image
+                    </label>
+                <?php endif; ?>
+                <input type="file" name="image" accept="image/jpeg,image/png,image/gif,image/webp">
+                <small style="color: #6c757d;">Upload a project logo or icon (JPG, PNG, GIF, or WebP). Recommended size: 200x200px or smaller</small>
                 
                 <label>Source Type *</label>
                 <select name="source_type" required>
@@ -188,7 +257,7 @@ catch (PDOException $e)
                 $stmt = $pdo->prepare("
                     SELECT COUNT(*) as commit_count 
                     FROM {$config['tables']['commits']} 
-                    WHERE project_id = ?
+                    WHERE project_id = ? AND processing_state = 'done'
                 ");
                 $stmt->execute([$project['id']]);
                 $stats = $stmt->fetch(PDO::FETCH_ASSOC);

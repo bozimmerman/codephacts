@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS projects
     auth_username VARCHAR(255) NULL,
     auth_password TEXT NULL,
     auth_ssh_key_path VARCHAR(500),
+    image_path VARCHAR(255) NULL,
+    description VARCHAR(500) NULL,
     last_updated DATETIME NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
@@ -29,6 +31,7 @@ CREATE TABLE IF NOT EXISTS commits
     commit_user VARCHAR(255) DEFAULT NULL,
     commit_timestamp DATETIME NOT NULL,
     processed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    processing_state VARCHAR(11) NULL,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     UNIQUE(project_id, commit_hash)
 ) ENGINE=InnoDB;

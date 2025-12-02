@@ -145,7 +145,7 @@ try
             END as metric_value
         FROM {$config['tables']['commits']} c
         INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
-        WHERE c.project_id = ?
+        WHERE c.project_id = ? AND c.processing_state = 'done'
         GROUP BY c.id, c.commit_hash, c.commit_timestamp
         ORDER BY c.commit_timestamp ASC
         ");
@@ -159,7 +159,7 @@ try
             SUM(s.{$metricColumn}) as metric_value
         FROM {$config['tables']['commits']} c
         INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
-        WHERE c.project_id = ?
+        WHERE c.project_id = ? AND c.processing_state = 'done'
         GROUP BY c.id, c.commit_hash, c.commit_timestamp
         ORDER BY c.commit_timestamp ASC
         ");
@@ -175,7 +175,7 @@ try
     SELECT COUNT(*)
     FROM {$config['tables']['commits']} c
     INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
-    WHERE c.project_id = ?
+    WHERE c.project_id = ? AND c.processing_state = 'done'
     ");
     $commitCountStmt->execute([$projectId]);
     $totalCommits = $commitCountStmt->fetchColumn();
@@ -189,7 +189,7 @@ try
         SUM(s.{$metricColumn}) as metric_value
     FROM {$config['tables']['commits']} c
     LEFT JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
-    WHERE c.project_id = ?
+    WHERE c.project_id = ? AND c.processing_state = 'done'
     GROUP BY c.id, c.commit_hash, c.commit_timestamp
     ORDER BY c.commit_timestamp DESC
     LIMIT {$commitsPerPage} OFFSET {$commitOffset}
@@ -379,14 +379,38 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
     </header>
 
     <div class="container">
-        <div class="card">
-            <h2><?= htmlspecialchars($project['name']) ?></h2>
-            <p><strong>Manager Name:</strong> <?= htmlspecialchars($project['manager'] ?? 'None') ?></p>
-            <p><strong>Repository Type:</strong> <?= htmlspecialchars($project['source_type']) ?></p>
-            <p><strong>Last Commit:</strong> <?= htmlspecialchars($project['last_commit'] ? $project['last_commit'] : 'None') ?></p>
-            <p><strong>Last Updated:</strong> <?= htmlspecialchars($project['last_updated'] ? $project['last_updated'] : 'Never') ?></p>
+<div class="card">
+            <?php if (!empty($project['image'])): ?>
+                <div style="display: grid; grid-template-columns: 150px 1fr; gap: 20px; align-items: start;">
+                    <img src="../data/project_images/<?= htmlspecialchars($project['image']) ?>" 
+                         alt="<?= htmlspecialchars($project['name']) ?>" 
+                         style="width: 150px; height: 150px; object-fit: contain; border: 1px solid #ddd; border-radius: 8px; padding: 10px;">
+                    <div>
+                        <h2><?= htmlspecialchars($project['name']) ?></h2>
+                        <?php if (!empty($project['description'])): ?>
+                            <p style="font-size: 1.1em; color: #495057; margin: 10px 0 15px 0;">
+                                <?= htmlspecialchars($project['description']) ?>
+                            </p>
+                        <?php endif; ?>
+                        <p><strong>Manager Name:</strong> <?= htmlspecialchars($project['manager'] ?? 'None') ?></p>
+                        <p><strong>Repository Type:</strong> <?= htmlspecialchars($project['source_type']) ?></p>
+                        <p><strong>Last Commit:</strong> <?= htmlspecialchars($project['last_commit'] ? $project['last_commit'] : 'None') ?></p>
+                        <p><strong>Last Updated:</strong> <?= htmlspecialchars($project['last_updated'] ? $project['last_updated'] : 'Never') ?></p>
+                    </div>
+                </div>
+            <?php else: ?>
+                <h2><?= htmlspecialchars($project['name']) ?></h2>
+                <?php if (!empty($project['description'])): ?>
+                    <p style="font-size: 1.1em; color: #495057; margin: 10px 0 15px 0;">
+                        <?= htmlspecialchars($project['description']) ?>
+                    </p>
+                <?php endif; ?>
+                <p><strong>Manager Name:</strong> <?= htmlspecialchars($project['manager'] ?? 'None') ?></p>
+                <p><strong>Repository Type:</strong> <?= htmlspecialchars($project['source_type']) ?></p>
+                <p><strong>Last Commit:</strong> <?= htmlspecialchars($project['last_commit'] ? $project['last_commit'] : 'None') ?></p>
+                <p><strong>Last Updated:</strong> <?= htmlspecialchars($project['last_updated'] ? $project['last_updated'] : 'Never') ?></p>
+            <?php endif; ?>
         </div>
-
         <div class="card">
             <h2>📊 View Metrics</h2>
             <form method="GET" style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">

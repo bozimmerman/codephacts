@@ -1,6 +1,6 @@
-Milliseconds out of timestamps please
 Total lines should have overlap for comments and blank lines on line change chart
 Add little project image for overview and project page, and description for project page
+Project breakdown per contributor (perhaps "project" drop down on contributors page? defaults 'All', but if given, data is limited)
 Date range selector for all charts (not just query page) -- maybe drag click mouse over chart dates to change date range.
 Language filter on project page to see only specific languages
 Branch comparison -- heck, just supporting multiple branches for git!

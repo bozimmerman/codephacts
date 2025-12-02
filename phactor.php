@@ -239,7 +239,7 @@ function getNextUnprocessedCommit($projectId, $sourceType, $sourceUrl, $includeC
         SELECT c.commit_hash
         FROM `$commitsTable` c
         INNER JOIN `$statsTable` s ON s.commit_id = c.id
-        WHERE c.project_id = ?
+        WHERE c.project_id = ? AND c.processing_state = 'done'
         ORDER BY c.commit_timestamp DESC
         LIMIT 1
     ");
@@ -252,6 +252,7 @@ function getNextUnprocessedCommit($projectId, $sourceType, $sourceUrl, $includeC
     $stmt = $pdo->prepare("
         SELECT c.commit_hash,
                UNIX_TIMESTAMP(c.processed_at) as processed_timestamp,
+               c.processing_state,
                (SELECT COUNT(*) FROM `$statsTable` s WHERE s.commit_id = c.id) as has_stats
         FROM `$commitsTable` c
         WHERE c.project_id = ?
@@ -262,6 +263,7 @@ function getNextUnprocessedCommit($projectId, $sourceType, $sourceUrl, $includeC
     {
         $tracked[$row['commit_hash']] = [
             'processed_at' => $row['processed_timestamp'],
+            'processing_state' => $row['processing_state'],
             'has_stats' => $row['has_stats'] > 0
         ];
     }
@@ -276,9 +278,17 @@ function getNextUnprocessedCommit($projectId, $sourceType, $sourceUrl, $includeC
         if (!isset($tracked[$commitHash]))
             return $commit;
         $info = $tracked[$commitHash];
+        
+        if ($info['processing_state'] === 'processing')
+        {
+            if ($info['processed_at'] && $info['processed_at'] < $staleThreshold)
+                return $commit;
+            continue;
+        }
+        if ($info['processing_state'] === 'done' && $info['has_stats'])
+            continue;
         if (!$info['has_stats'])
             return $commit;
-
         if ($info['processed_at']
         && $info['processed_at'] < $staleThreshold)
             return $commit;
@@ -349,7 +359,6 @@ function processProject($tempDir, $excludedDirs)
         $shouldSkip = false;
         foreach ($excludedDirs as $excludedDir)
         {
-            // Check if the relative path starts with the excluded directory
             if (strpos($relativePath, $excludedDir . DIRECTORY_SEPARATOR) === 0)
             {
                 $shouldSkip = true;
@@ -539,6 +548,34 @@ function updateStatistics($projectId, $commitId, $report)
     }
 }
 
+function markCommitDone($commitId)
+{
+    global $config, $pdo;
+    
+    $commitsTable = $config['tables']['commits'] ?? 'commits';
+    
+    $stmt = $pdo->prepare("
+        UPDATE `$commitsTable`
+        SET processing_state = 'done', processed_at = NOW()
+        WHERE id = ?
+    ");
+    $stmt->execute([$commitId]);
+}
+
+function markCommitError($commitId)
+{
+    global $config, $pdo;
+    
+    $commitsTable = $config['tables']['commits'] ?? 'commits';
+    
+    $stmt = $pdo->prepare("
+        UPDATE `$commitsTable`
+        SET processing_state = 'error', processed_at = NOW()
+        WHERE id = ?
+    ");
+    $stmt->execute([$commitId]);
+}
+
 function updateProjectLastCommit($projectId, $latestCommit)
 {
     global $config, $pdo;
@@ -562,10 +599,11 @@ function tryClaimCommit($projectId, $commit)
         $commitHash = $commit['commit'];
         $timestamp = $commit['timestamp'];
         $commitUser = isset($commit['user']) ? $commit['user'] : 'unknown';
+        
         $stmt = $pdo->prepare("
             INSERT INTO `$commitsTable`
-            (project_id, commit_hash, commit_user, commit_timestamp, processed_at)
-            VALUES (?, ?, ?, FROM_UNIXTIME(?), NOW())
+            (project_id, commit_hash, commit_user, commit_timestamp, processed_at, processing_state)
+            VALUES (?, ?, ?, FROM_UNIXTIME(?), NOW(), 'processing')
         ");
         $stmt->execute([$projectId, $commitHash, $commitUser, $timestamp]);
         return $pdo->lastInsertId();
@@ -573,8 +611,26 @@ function tryClaimCommit($projectId, $commit)
     catch (PDOException $e) 
     {
         if ($e->getCode() == 23000)
+        {
+            $staleTimeout = $GLOBALS['config']['stale_timeout'] ?? 86400;
+            $staleTimestamp = time() - $staleTimeout;
+            $stmt = $pdo->prepare("
+                UPDATE `$commitsTable`
+                SET processed_at = NOW(), processing_state = 'processing'
+                WHERE project_id = ? AND commit_hash = ? 
+                AND (processing_state = 'error'
+                     OR (processing_state = 'processing' AND processed_at < FROM_UNIXTIME(?)))
+            ");
+            $stmt->execute([$projectId, $commitHash, $staleTimestamp]);
+            if ($stmt->rowCount() > 0)
+            {
+                $stmt = $pdo->prepare("SELECT id FROM `$commitsTable` WHERE project_id = ? AND commit_hash = ?");
+                $stmt->execute([$projectId, $commitHash]);
+                return $stmt->fetchColumn();
+            }
             return false;
-        throw $e; // Some other error
+        }
+        throw $e;
     }
 }
 
@@ -642,6 +698,7 @@ function processCommitForProject($project, $commit, $commitId, $current = 1, $to
         {
             error_log("Failed to checkout commit {$commit['commit']} for {$project['name']}");
             outputProgress('error', "Failed to checkout commit");
+            markCommitError($commitId);
             return false;
         }
         $excludedDirs = [];
@@ -656,10 +713,11 @@ function processCommitForProject($project, $commit, $commitId, $current = 1, $to
         {
             error_log("Failed to process files for {$project['name']}");
             outputProgress('error', "Failed to process files");
+            markCommitError($commitId);
             return false;
         }
-        // update statistics and mark as complete
         updateStatistics($project['id'], $commitId, $rpt);
+        markCommitDone($commitId);
         updateProjectLastCommit($project['id'], $commit['commit']);
         outputProgress('commit_complete', "Completed commit", [
             'project' => $project['name'],
@@ -667,6 +725,11 @@ function processCommitForProject($project, $commit, $commitId, $current = 1, $to
             'languages' => array_keys($rpt)
         ]);
         return true;
+    }
+    catch (Exception $e)
+    {
+        markCommitError($commitId);
+        throw $e;
     }
     finally 
     {
@@ -685,6 +748,7 @@ function findCommitWithoutStats($projectId)
         LEFT JOIN `$statsTable` s ON s.commit_id = c.id
         WHERE c.project_id = ?
         AND s.id IS NULL
+        AND (c.processing_state != 'processing')
         ORDER BY c.commit_timestamp ASC
         LIMIT 1
     ");
