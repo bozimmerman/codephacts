@@ -2,9 +2,9 @@
 
 ## Overview
 
-CodePhacts is a PHP-based web application that analyzes source code repositories (Git and SVN), 
-tracks code statistics over time, calculates complexity, and provides detailed estimations 
-using five different cost models: COCOMO, COCOMO II, Function Point Analysis, SLIM, and Putnam.
+CodePhacts is a PHP-based web application alternative to tokei/cloc/sloc that analyzes source 
+code repositories (Git and SVN) to give you historical commit tracking, cyclomatic & cognitive 
+complexity, weighted LOC, and built-in COCOMO/SLIM/Putnam/Function Point cost estimation.
 
 ### Key Features
 
