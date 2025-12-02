@@ -379,7 +379,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
     </header>
 
     <div class="container">
-<div class="card">
+		<div class="card">
             <?php if (!empty($project['image'])): ?>
                 <div style="display: grid; grid-template-columns: 150px 1fr; gap: 20px; align-items: start;">
                     <img src="../data/project_images/<?= htmlspecialchars($project['image']) ?>" 
@@ -514,7 +514,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         <?php endif; ?>
 
         <?php 
-        $locBasedMetrics = ['total_lines', 'code_lines', 'ncloc', 'code_statements', 'weighted_code_statements', 'weighted_code_lines', 'num_files'];
+        $locBasedMetrics = ['total_lines', 'code_lines', 'ncloc', 'code_statements', 'weighted_code_statements', 'weighted_code_lines'];
         $showCostEstimation = in_array($selectedMetric, $locBasedMetrics) && $estimateBase > 0;
         if ($showCostEstimation): 
         ?>
