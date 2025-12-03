@@ -65,3 +65,4 @@ CREATE TABLE IF NOT EXISTS statistics
 CREATE INDEX idx_statistics_project_id ON statistics(project_id);
 CREATE INDEX idx_statistics_commit_id ON statistics(commit_id);
 CREATE INDEX idx_statistics_language ON statistics(language);
+CREATE INDEX idx_statistics_project_language_commit ON statistics(project_id, language, commit_id);

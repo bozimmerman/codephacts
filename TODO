@@ -1,7 +1,9 @@
+ Actual Compatibility Issues
+INSERT OR REPLACE vs ON DUPLICATE KEY UPDATE (in other parts of codebase, not languages.php directly)
+
 Total lines should have overlap for comments and blank lines on line change chart
 Project breakdown per contributor (perhaps "project" drop down on contributors page? defaults 'All', but if given, data is limited)
-Date range selector for all charts (not just query page) -- maybe drag click mouse over chart dates to change date range.
-Language filter on project page to see only specific languages
+Language filter on *project* page to see only specific languages
 
 New chart types to consider:
 - Heatmap showing commit activity by day/week/month
