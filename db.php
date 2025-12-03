@@ -68,10 +68,19 @@ class SQLiteCompatPDO
         $sql = str_replace('NOW()', "datetime('now')", $sql);
         $sql = str_replace('FROM_UNIXTIME(?)', "datetime(?, 'unixepoch')", $sql);
         $sql = preg_replace('/UNIX_TIMESTAMP\s*\(\s*([^)]+)\s*\)/', "strftime('%s', $1)", $sql);
-        if (stripos($sql, 'ON DUPLICATE KEY UPDATE') !== false) 
+        if (stripos($sql, 'ON DUPLICATE KEY UPDATE') !== false)
         {
-            $sql = preg_replace('/INSERT INTO/i', 'INSERT OR REPLACE INTO', $sql);
-            $sql = preg_replace('/\s+ON DUPLICATE KEY UPDATE.*$/is', '', $sql);
+            $matches = [];
+            preg_match('/ON DUPLICATE KEY UPDATE\s+(.+)$/is', $sql, $matches);
+            $updateClause = isset($matches[1]) ? trim($matches[1]) : '';
+            $sql = preg_replace('/\s+ON DUPLICATE KEY UPDATE\s+.+$/is', '', $sql);
+            if (!empty($updateClause))
+            {
+                $updateClause = preg_replace('/VALUES\s*\(\s*(\w+)\s*\)/i', 'excluded.$1', $updateClause);
+                $sql .= ' ON CONFLICT DO UPDATE SET ' . $updateClause;
+            }
+            else
+                $sql = preg_replace('/INSERT INTO/i', 'INSERT OR IGNORE INTO', $sql);
         }
         $sql = str_replace('`', '"', $sql);
         return $this->pdo->prepare($sql);
