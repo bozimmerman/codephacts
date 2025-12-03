@@ -131,7 +131,7 @@ catch (PDOException $e)
                                         <div class="meta">
                                             <strong>Type:</strong> <?= htmlspecialchars($project['source_type']) ?><br>
                                             <strong>Commits:</strong> <?= $project['commit_count'] ?><br>
-                                            <strong>Last Updated:</strong> <?= $project['last_commit_date'] ? htmlspecialchars($project['last_commit_date']) : 'Never' ?>
+                                            <strong>Last Updated:</strong> <?= $project['last_commit_date'] ? date('Y-m-d H:i', strtotime($project['last_commit_date'])) : 'Never' ?>
                                         </div>
                                         <div class="actions">
                                             <a href="project.php?id=<?= $project['id'] ?>" class="button">View Details</a>
@@ -144,7 +144,7 @@ catch (PDOException $e)
                                 <div class="meta">
                                     <strong>Type:</strong> <?= htmlspecialchars($project['source_type']) ?><br>
                                     <strong>Commits:</strong> <?= $project['commit_count'] ?><br>
-                                    <strong>Last Updated:</strong> <?= $project['last_commit_date'] ? htmlspecialchars($project['last_commit_date']) : 'Never' ?>
+                                    <strong>Last Updated:</strong> <?= $project['last_commit_date'] ? date('Y-m-d H:i', strtotime($project['last_commit_date'])) : 'Never' ?>
                                 </div>
                                 <div class="actions">
                                     <a href="project.php?id=<?= $project['id'] ?>" class="button">View Details</a>
