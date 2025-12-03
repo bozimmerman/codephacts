@@ -715,7 +715,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         
         <div class="card">
             <h2>Code Composition Analysis</h2>
-            <div class="chart-container" style="height: 300px;">
+            <div class="chart-container" style="height: 150px;">
                 <canvas id="compositionChart"></canvas>
             </div>
         </div>
@@ -723,7 +723,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         <?php if (!empty($allCommits) && count($allCommits) >= 1): ?>
         <div class="card">
             <h2><?= htmlspecialchars($metricConfig['chartTitle']) ?> - Changes Per Interval</h2>
-            <div class="chart-container" style="height: 300px;">
+            <div class="chart-container" style="height: 450px;">
                 <canvas id="codeHistoryChart"></canvas>
             </div>
         </div>
