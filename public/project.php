@@ -545,7 +545,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                 <?php if (isset($_GET['end_date'])): ?>
                 <input type="hidden" name="end_date" value="<?= htmlspecialchars($_GET['end_date']) ?>">
                 <?php endif; ?>
-                <label for="metric" style="margin: 0; font-weight: bold;">Select Metric:</label>
+                <label for="metric" style="margin: 0; font-weight: bold;">Metric:</label>
                 <select name="metric" id="metric" onchange="this.form.submit()" style="width: auto; margin: 0;">
                     <?php foreach ($statsColumnsMap as $key => $config): ?>
                         <option value="<?= $key ?>" <?= $selectedMetric === $key ? 'selected' : '' ?>>

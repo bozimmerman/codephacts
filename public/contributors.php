@@ -167,7 +167,139 @@ else
 
 $estimates = $estimateBase > 0 ? generateEstimates($estimateBase, $primaryLanguage) : null;
 $hourlyRate = 75;
-$hoursPerMonth = 160;?>
+$hoursPerMonth = 160;
+$topContributors = array_slice($contributors, 0, 10); // Get top 10
+$isComplexityMetric = in_array($selectedMetric, ['cyclomatic_complexity', 'cognitive_complexity']);
+
+function determineOptimalGrouping($commits, $targetDataPoints = 100)
+{
+    if (empty($commits) || count($commits) <= 1)
+        return ['interval' => 'day', 'intervalDays' => 1];
+    $firstCommit = strtotime($commits[0]['commit_timestamp']);
+    $lastCommit = strtotime($commits[count($commits) - 1]['commit_timestamp']);
+    $totalDays = ceil(($lastCommit - $firstCommit) / 86400);
+    if ($totalDays <= $targetDataPoints)
+        return ['interval' => 'day', 'intervalDays' => 1];
+    $intervals = [
+        ['interval' => 'day', 'intervalDays' => 1],
+        ['interval' => '3 days', 'intervalDays' => 3],
+        ['interval' => 'week', 'intervalDays' => 7],
+        ['interval' => '2 weeks', 'intervalDays' => 14],
+        ['interval' => 'month', 'intervalDays' => 30],
+        ['interval' => 'quarter', 'intervalDays' => 90],
+        ['interval' => 'year', 'intervalDays' => 365]
+    ];
+    $bestInterval = $intervals[0];
+    $bestDifference = abs($targetDataPoints - ($totalDays / $intervals[0]['intervalDays']));
+    foreach ($intervals as $interval)
+    {
+        $resultingPoints = $totalDays / $interval['intervalDays'];
+        $difference = abs($targetDataPoints - $resultingPoints);
+        if ($resultingPoints >= 50 && $resultingPoints <= 150)
+        {
+            if ($difference < $bestDifference)
+            {
+                $bestInterval = $interval;
+                $bestDifference = $difference;
+            }
+        }
+    }
+    return $bestInterval;
+}
+
+$contributorChartData = [];
+foreach ($topContributors as $contributor)
+{
+    $contributorName = $contributor['contributor'];
+    
+    // Query across ALL projects for this contributor (not a single project)
+    if ($isComplexityMetric) {
+        $stmt = $pdo->prepare("
+            SELECT
+                c.project_id,
+                c.commit_timestamp,
+                CASE
+                    WHEN SUM(s.code_lines) > 0 THEN
+                        (SUM(s.{$metricColumn}) / (SUM(s.code_lines) / 1000.0))
+                    ELSE 0
+                END as metric_value
+            FROM {$config['tables']['commits']} c
+            LEFT JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+            WHERE c.commit_user = ?
+              AND c.processing_state = 'done'
+            GROUP BY c.id, c.project_id, c.commit_timestamp
+            ORDER BY c.project_id, c.commit_timestamp ASC
+        ");
+        $stmt->execute([$contributorName]);
+    } else {
+        $stmt = $pdo->prepare("
+            SELECT
+                c.project_id,
+                c.commit_timestamp,
+                COALESCE(SUM(s.{$metricColumn}), 0) as metric_value
+            FROM {$config['tables']['commits']} c
+            LEFT JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+            WHERE c.commit_user = ?
+              AND c.processing_state = 'done'
+            GROUP BY c.id, c.project_id, c.commit_timestamp
+            ORDER BY c.project_id, c.commit_timestamp ASC
+        ");
+        $stmt->execute([$contributorName]);
+    }
+    
+    $commits = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if (empty($commits))
+        continue;
+    
+    $chartLabels = [];
+    $commitCounts = [];
+    $metricDeltas = [];
+    
+    $previousValue = 0;
+    $previousProjectId = null;  // ADD THIS
+    $commitCountByBucket = [];
+    $grouping = determineOptimalGrouping($commits);
+    $intervalDays = $grouping['intervalDays'];
+    foreach ($commits as $commit)
+    {
+        $timestamp = strtotime($commit['commit_timestamp']);
+        $bucketKey = floor($timestamp / ($intervalDays * 86400)) * ($intervalDays * 86400);
+        if (!isset($commitCountByBucket[$bucketKey])) 
+        {
+            $commitCountByBucket[$bucketKey] = [
+                'count' => 0,
+                'deltas' => []
+            ];
+        }
+        $currentValue = (float)$commit['metric_value'];
+        if ($previousProjectId !== $commit['project_id']) {
+            $previousValue = 0;
+            $previousProjectId = $commit['project_id'];
+        }
+        $delta = $currentValue - $previousValue;
+        
+        $commitCountByBucket[$bucketKey]['count']++;
+        $commitCountByBucket[$bucketKey]['deltas'][] = $delta;
+        
+        $previousValue = $currentValue;
+    }
+    ksort($commitCountByBucket);
+    foreach ($commitCountByBucket as $bucketKey => $data) 
+    {
+        $date = new DateTime();
+        $date->setTimestamp($bucketKey);
+        $chartLabels[] = $date->format('Y-m-d');
+        $commitCounts[] = $data['count'];
+        $metricDeltas[] = count($data['deltas']) > 0 ? array_sum($data['deltas']) / count($data['deltas']) : 0;
+    }
+    $contributorChartData[$contributorName] = [
+        'labels' => $chartLabels,
+        'commits' => $commitCounts,
+        'deltas' => $metricDeltas,
+        'interval' => $grouping['interval']
+    ];
+}
+?>
 <!DOCTYPE html>
 <html>
 <head>
@@ -264,14 +396,14 @@ $hoursPerMonth = 160;?>
                 <label for="contributor" style="margin: 0; font-weight: bold;">Contributor:</label>
                 <select name="contributor" id="contributor" onchange="this.form.submit()" style="width: auto; margin: 0;">
                     <option value="ALL" <?= $selectedContributor === 'ALL' ? 'selected' : '' ?>>All Contributors</option>
-                    <?php foreach ($contributors as $contrib): ?>
-                        <option value="<?= htmlspecialchars($contrib['contributor']) ?>" 
-                                <?= $selectedContributor === $contrib['contributor'] ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($contrib['contributor']) ?>
+                    <?php foreach ($allContributors as $name): ?>
+                        <option value="<?= htmlspecialchars($name) ?>"
+                                <?= $selectedContributor === $name ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($name) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
-                <label for="metric" style="margin: 0; font-weight: bold;">Select Metric:</label>
+                <label for="metric" style="margin: 0; font-weight: bold;">Metric:</label>
                 <select name="metric" id="metric" onchange="this.form.submit()" style="width: auto; margin: 0;">
                     <?php foreach ($statsColumnsMap as $key => $config): ?>
                         <option value="<?= $key ?>" <?= $selectedMetric === $key ? 'selected' : '' ?>>
@@ -345,164 +477,50 @@ $hoursPerMonth = 160;?>
                 </div>
             <?php endif; ?>
         </div>
-
-        <?php if ($estimates !== null): ?>
-        <div class="card">
-            <h2>📊 <?= $selectedContributor === 'ALL' ? 'Portfolio-Wide' : htmlspecialchars($selectedContributor) . '\'s' ?> Cost Estimation</h2>
-            <p><?= $selectedContributor === 'ALL' ? 'Aggregate estimates across all projects' : 'Estimates for ' . htmlspecialchars($selectedContributor) ?> 
-            	based on <strong><?= number_format($estimateBase) ?></strong> <?= $selectedMetric === 'total_lines' ? 'lines of code' : htmlspecialchars(strtolower($metricConfig['label'])) ?> (<?= number_format($estimateBase / 1000, 1) ?> K)</p>
-            <div class="estimate-grid">
-                <!-- COCOMO -->
-                <div class="estimate-card">
-                    <h3>COCOMO (1981)</h3>
-                    <div class="metric">
-                        <span class="metric-label">Effort:</span>
-                        <span class="metric-value"><?= number_format($estimates['cocomo']['effort'], 1) ?> person-months</span>
+        <?php if (!empty($contributorChartData)): ?>
+        <div style="margin-top: 40px;">
+            <h2 style="margin-bottom: 20px;">📈 Top Contributor Activity</h2>
+            
+            <?php foreach ($contributorChartData as $name => $chartData): ?>
+            <div class="card" style="margin-bottom: 30px;">
+                <h3 style="margin-top: 0; color: #495057; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
+                    <?= htmlspecialchars($name) ?>
+                </h3>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+                    <!-- Commit Count Chart -->
+                    <div>
+                        <h4 style="text-align: center; color: #6c757d; margin-bottom: 10px;">
+                            Commits Over Time
+                        </h4>
+                        <div class="chart-container" style="height: 200px;">
+                            <canvas id="commits_<?= htmlspecialchars(preg_replace('/[^a-zA-Z0-9]/', '_', $name)) ?>"></canvas>
+                        </div>
                     </div>
-                    <div class="metric">
-                        <span class="metric-label">Schedule:</span>
-                        <span class="metric-value"><?= number_format($estimates['cocomo']['time'], 1) ?> months</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Team Size:</span>
-                        <span class="metric-value"><?= number_format($estimates['cocomo']['people'], 1) ?> people</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Cost Estimate:</span>
-                        <span class="metric-value">$<?= number_format($estimates['cocomo']['effort'] * $hoursPerMonth * $hourlyRate, 0) ?></span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Mode:</span>
-                        <span class="metric-value"><?= ucfirst($estimates['cocomo']['mode']) ?></span>
-                    </div>
-                    <div class="model-description">
-                        Barry Boehm's foundational model using empirical coefficients based on project type.
-                    </div>
-                </div>
-
-                <!-- COCOMO II -->
-                <div class="estimate-card">
-                    <h3>COCOMO II (2000)</h3>
-                    <div class="metric">
-                        <span class="metric-label">Effort:</span>
-                        <span class="metric-value"><?= number_format($estimates['cocomo2']['effort'], 1) ?> person-months</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Schedule:</span>
-                        <span class="metric-value"><?= number_format($estimates['cocomo2']['time'], 1) ?> months</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Team Size:</span>
-                        <span class="metric-value"><?= number_format($estimates['cocomo2']['people'], 1) ?> people</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Cost Estimate:</span>
-                        <span class="metric-value">$<?= number_format($estimates['cocomo2']['effort'] * $hoursPerMonth * $hourlyRate, 0) ?></span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Exponent (B):</span>
-                        <span class="metric-value"><?= number_format($estimates['cocomo2']['exponent'], 3) ?></span>
-                    </div>
-                    <div class="model-description">
-                        Updated model with scale factors for modern development practices and reuse.
-                    </div>
-                </div>
-
-                <!-- Function Point Analysis -->
-                <div class="estimate-card">
-                    <h3>Function Point Analysis</h3>
-                    <div class="metric">
-                        <span class="metric-label">Function Points:</span>
-                        <span class="metric-value"><?= number_format($estimates['functionPoints']['functionPoints'], 0) ?> FP</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Effort:</span>
-                        <span class="metric-value"><?= number_format($estimates['functionPoints']['effort'], 1) ?> person-months</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Schedule:</span>
-                        <span class="metric-value"><?= number_format($estimates['functionPoints']['time'], 1) ?> months</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Team Size:</span>
-                        <span class="metric-value"><?= number_format($estimates['functionPoints']['people'], 1) ?> people</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Cost Estimate:</span>
-                        <span class="metric-value">$<?= number_format($estimates['functionPoints']['effort'] * $hoursPerMonth * $hourlyRate, 0) ?></span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Primary Language:</span>
-                        <span class="metric-value"><?= $estimates['functionPoints']['language'] ?></span>
-                    </div>
-                    <div class="model-description">
-                        Measures functionality independent of technology using standardized function points (~<?= $estimates['functionPoints']['locPerFP'] ?> LOC/FP for <?= $estimates['functionPoints']['language'] ?>).
-                    </div>
-                </div>
-
-                <!-- SLIM -->
-                <div class="estimate-card">
-                    <h3>SLIM Model</h3>
-                    <div class="metric">
-                        <span class="metric-label">Effort:</span>
-                        <span class="metric-value"><?= number_format($estimates['slim']['effort'], 1) ?> person-months</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Schedule:</span>
-                        <span class="metric-value"><?= number_format($estimates['slim']['time'], 1) ?> months</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Team Size:</span>
-                        <span class="metric-value"><?= number_format($estimates['slim']['people'], 1) ?> people</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Cost Estimate:</span>
-                        <span class="metric-value">$<?= number_format($estimates['slim']['effort'] * $hoursPerMonth * $hourlyRate, 0) ?></span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Productivity Index:</span>
-                        <span class="metric-value"><?= number_format($estimates['slim']['productivity']) ?></span>
-                    </div>
-                    <div class="model-description">
-                        Uses Rayleigh curves and Putnam's software equation emphasizing optimal staffing over time.
-                    </div>
-                </div>
-
-                <!-- Putnam Model -->
-                <div class="estimate-card">
-                    <h3>Putnam Model</h3>
-                    <div class="metric">
-                        <span class="metric-label">Effort:</span>
-                        <span class="metric-value"><?= number_format($estimates['putnam']['effort'], 1) ?> person-months</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Schedule:</span>
-                        <span class="metric-value"><?= number_format($estimates['putnam']['time'], 1) ?> months</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Min Schedule:</span>
-                        <span class="metric-value"><?= number_format($estimates['putnam']['minTime'], 1) ?> months</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Team Size:</span>
-                        <span class="metric-value"><?= number_format($estimates['putnam']['people'], 1) ?> people</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Cost Estimate:</span>
-                        <span class="metric-value">$<?= number_format($estimates['putnam']['effort'] * $hoursPerMonth * $hourlyRate, 0) ?></span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Technology Factor:</span>
-                        <span class="metric-value"><?= number_format($estimates['putnam']['technology']) ?></span>
-                    </div>
-                    <div class="model-description">
-                        Lawrence Putnam's lifecycle model based on productivity and minimum development time constraints.
+                    
+                    <!-- Metric Delta Chart -->
+                    <div>
+                        <h4 style="text-align: center; color: #6c757d; margin-bottom: 10px;">
+                            <?= htmlspecialchars($metricConfig['label']) ?> Contribution
+                        </h4>
+                        <div class="chart-container" style="height: 200px;">
+                            <canvas id="delta_<?= htmlspecialchars(preg_replace('/[^a-zA-Z0-9]/', '_', $name)) ?>"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
-
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+        <?php if ($estimates !== null): ?>
             <div class="comparison-table">
-                <h3>Model Comparison Summary</h3>
+                <h3>Model Comparison Summary
+                    <?php if ($selectedContributor !== 'ALL'): ?>
+                        - <?= htmlspecialchars($selectedContributor) ?>
+                    <?php else: ?>
+                        - All Contributors
+                    <?php endif; ?>
+                </h3>
                 <table>
                     <thead>
                         <tr>
@@ -582,7 +600,12 @@ $hoursPerMonth = 160;?>
 
             <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-left: 4px solid #007bff; border-radius: 4px;">
                 <p style="margin: 0; font-size: 0.9em;">
-                    <strong>Note:</strong> These portfolio-wide estimates represent the aggregate value of all contributors combined. Individual contributor statistics may vary based on specific roles and project involvement.
+                    <strong>Note:</strong> 
+                    <?php if ($selectedContributor !== 'ALL'): ?>
+                        These estimates are based solely on <?= htmlspecialchars($selectedContributor) ?>'s contributions (<?= number_format($estimateBase) ?> <?= $selectedMetric === 'total_lines' ? 'lines of code' : htmlspecialchars(strtolower($metricConfig['label'])) ?>). Individual contributor estimates may not reflect collaborative work or code review contributions.
+                    <?php else: ?>
+                        These portfolio-wide estimates represent the aggregate value of all contributors combined. Individual contributor statistics may vary based on specific roles and project involvement.
+                    <?php endif; ?>
                 </p>
             </div>
         </div>
@@ -633,7 +656,109 @@ $hoursPerMonth = 160;?>
         }
     });
     <?php endif; ?>
-    </script>
+    <?php foreach ($contributorChartData as $name => $chartData): ?>
+        <?php $safeName = preg_replace('/[^a-zA-Z0-9]/', '_', $name); ?>
+        (function() 
+        {
+            const ctx = document.getElementById('commits_<?= $safeName ?>');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: <?= json_encode($chartData['labels']) ?>,
+                    datasets: [{
+                        label: 'Commits per <?= $chartData['interval'] ?>',
+                        data: <?= json_encode($chartData['commits']) ?>.map(v => Math.sqrt(v)),
+                        backgroundColor: 'rgba(0, 123, 255, 0.7)',
+                        borderColor: '#007bff',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1,
+                                callback: function(value) {
+                                    return Math.round(Math.pow(value, 2));
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const transformedValue = context.parsed.y;
+                                    const realValue = Math.round(Math.pow(transformedValue, 2));
+                                    return 'Commits: ' + realValue;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        })();
+    
+        // Metric delta chart (with sqrt scaling for absolute values)
+        (function() 
+        {
+            const ctx = document.getElementById('delta_<?= $safeName ?>');
+            const rawData = <?= json_encode($chartData['deltas']) ?>;
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: <?= json_encode($chartData['labels']) ?>,
+                    datasets: [{
+                        label: 'Avg <?= htmlspecialchars($metricConfig['label']) ?> Change',
+                        data: rawData.map(v => v >= 0 ? Math.sqrt(v) : -Math.sqrt(Math.abs(v))),
+                        backgroundColor: rawData.map(v => v >= 0 ? 'rgba(40, 167, 69, 0.7)' : 'rgba(220, 53, 69, 0.7)'),
+                        borderColor: rawData.map(v => v >= 0 ? '#28a745' : '#dc3545'),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    const realValue = value >= 0 
+                                        ? Math.pow(value, 2) 
+                                        : -Math.pow(Math.abs(value), 2);
+                                    return (realValue >= 0 ? '+' : '') + Math.round(realValue);
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const transformedValue = context.parsed.y;
+                                    const realValue = transformedValue >= 0 
+                                        ? Math.pow(transformedValue, 2) 
+                                        : -Math.pow(Math.abs(transformedValue), 2);
+                                    return 'Avg change: ' + (realValue >= 0 ? '+' : '') + Math.round(realValue);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        })();
+    <?php endforeach; ?>
+</script>
     <footer style="text-align: center; padding: 20px; margin-top: 40px; font-size: 0.8em; color: #999;">
         <a href="../admin/login.php" style="color: #999; text-decoration: none;">admin</a>
     </footer>
