@@ -29,60 +29,63 @@ if (!preg_match('/^[a-z_]+$/', $metricColumn))
 try
 {
     $pdo = getDatabase($config);
-    $stmt = $pdo->query("
-        SELECT
-            c.id,
-            c.project_id,
-            c.commit_user,
-            c.commit_timestamp,
-            s.language,
-            s.total_lines,
-            s.code_lines,
-            s.{$metricColumn} as metric_value
-        FROM {$config['tables']['commits']} c
-        INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
-        WHERE c.commit_user IS NOT NULL AND c.commit_user != '' AND c.processing_state = 'done'
-        ORDER BY c.project_id, s.language, c.commit_timestamp ASC
-    ");
-    $allCommits = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
     $selectedContributor = isset($_GET['contributor']) ? $_GET['contributor'] : 'ALL';
-    $contributors = [];
-    $previousState = [];
-    $allProjects = [];
     
-    foreach ($allCommits as $commit)
+    $contributorStmt = $pdo->query("
+        SELECT DISTINCT commit_user
+        FROM {$config['tables']['commits']}
+        WHERE commit_user IS NOT NULL AND commit_user != '' AND processing_state = 'done'
+        ORDER BY commit_user
+    ");
+    $allContributors = $contributorStmt->fetchAll(PDO::FETCH_COLUMN);
+    $contributors = [];
+    $allProjects = [];
+    foreach ($allContributors as $user)
     {
-        $user = $commit['commit_user'];
-        $projectId = $commit['project_id'];
-        $language = $commit['language'];
-        $commitId = $commit['id'];
-        $key = $projectId . '_' . $language;
+        if ($selectedContributor != 'ALL' && $selectedContributor != $user)
+            continue;
+        $contributors[$user] = [
+            'contributor' => $user,
+            'commits' => 0,
+            'projects' => [],
+            'total_lines_delta' => 0,
+            'code_lines_delta' => 0,
+            'metric_value_delta' => 0,
+            'first_commit' => null,
+            'last_commit' => null
+        ];
+        $stmt = $pdo->prepare("
+            SELECT
+                c.id,
+                c.project_id,
+                c.commit_timestamp,
+                s.language,
+                s.total_lines,
+                s.code_lines,
+                s.{$metricColumn} as metric_value
+            FROM {$config['tables']['commits']} c
+            INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+            WHERE c.commit_user = ? AND c.processing_state = 'done'
+            ORDER BY c.project_id, s.language, c.commit_timestamp ASC
+        ");
+        $stmt->execute([$user]);
+        $previousState = [];
         
-        if (!isset($contributors[$user]))
+        while ($commit = $stmt->fetch(PDO::FETCH_ASSOC))
         {
-            $contributors[$user] = [
-                'contributor' => $user,
-                'commits' => [],
-                'projects' => [],
-                'total_lines_delta' => 0,
-                'code_lines_delta' => 0,
-                'metric_value_delta' => 0,
-                'first_commit' => $commit['commit_timestamp'],
-                'last_commit' => $commit['commit_timestamp']
-            ];
-        }
-        if (($selectedContributor == 'ALL') || ($selectedContributor == $user))
-        {
+            $projectId = $commit['project_id'];
+            $language = $commit['language'];
+            $key = $projectId . '_' . $language;
+            
             $allProjects[$projectId] = true;
-            $contributors[$user]['commits'][$commitId] = true;
+            $contributors[$user]['commits']++;
             $contributors[$user]['projects'][$projectId] = true;
-            if ($commit['commit_timestamp'] < $contributors[$user]['first_commit'])
+            
+            if ($contributors[$user]['first_commit'] === null || $commit['commit_timestamp'] < $contributors[$user]['first_commit'])
                 $contributors[$user]['first_commit'] = $commit['commit_timestamp'];
-            if ($commit['commit_timestamp'] > $contributors[$user]['last_commit'])
+            if ($contributors[$user]['last_commit'] === null || $commit['commit_timestamp'] > $contributors[$user]['last_commit'])
                 $contributors[$user]['last_commit'] = $commit['commit_timestamp'];
                     
-                
             if (isset($previousState[$key]))
             {
                 $contributors[$user]['total_lines_delta'] += ($commit['total_lines'] - $previousState[$key]['total_lines']);
@@ -95,29 +98,27 @@ try
                 $contributors[$user]['code_lines_delta'] += $commit['code_lines'];
                 $contributors[$user]['metric_value_delta'] += $commit['metric_value'];
             }
+            
+            $previousState[$key] = [
+                'total_lines' => $commit['total_lines'],
+                'code_lines' => $commit['code_lines'],
+                'metric_value' => $commit['metric_value']
+            ];
         }
-        $previousState[$key] = [
-            'total_lines' => $commit['total_lines'],
-            'code_lines' => $commit['code_lines'],
-            'metric_value' => $commit['metric_value']
-        ];
+        $contributors[$user]['commit_count'] = $contributors[$user]['commits'];
+        $contributors[$user]['project_count'] = count($contributors[$user]['projects']);
+        unset($contributors[$user]['commits']);
+        unset($contributors[$user]['projects']);
     }
-    $contributors = array_values($contributors);
-    foreach ($contributors as &$contrib)
-    {
-        $contrib['commit_count'] = count($contrib['commits']);
-        $contrib['project_count'] = count($contrib['projects']);
-        unset($contrib['commits']);
-        unset($contrib['projects']);
-    }
-    unset($contrib);
     
-    if ($selectedMetric === 'total_lines') 
+    $contributors = array_values($contributors);
+    
+    if ($selectedMetric === 'total_lines')
     {
         usort($contributors, function($a, $b) {
             return $b['total_lines_delta'] - $a['total_lines_delta'];
         });
-    } 
+    }
     else
     {
         usort($contributors, function($a, $b) {
@@ -129,7 +130,6 @@ catch (PDOException $e)
 {
     die("Database error: " . $e->getMessage());
 }
-
 $totals = [
     'total_lines_delta' => 0,
     'code_lines_delta' => 0,
