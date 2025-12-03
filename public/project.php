@@ -20,7 +20,6 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'estimation_functions.php';
 
 $projectId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
-// Load metrics configuration and determine selected metric
 $statsColumnsMap = require __DIR__ . DIRECTORY_SEPARATOR . 'stats_columns_map.php';
 $selectedMetric = isset($_GET['metric']) ? $_GET['metric'] : 'total_lines';
 if (!isset($statsColumnsMap[$selectedMetric]))
@@ -39,6 +38,30 @@ try
     
     if (!$project)
         die("Project not found");
+    
+    $langStmt = $pdo->prepare("
+        SELECT DISTINCT s.language
+        FROM {$config['tables']['statistics']} s
+        WHERE s.project_id = ?
+        ORDER BY s.language ASC
+    ");
+    $langStmt->execute([$projectId]);
+    $availableLanguages = $langStmt->fetchAll(PDO::FETCH_COLUMN);
+    
+    $selectedLanguages = isset($_GET['langs']) && !empty($_GET['langs'])
+                        ? (is_array($_GET['langs']) ? $_GET['langs'] : explode(',', $_GET['langs']))
+                        : $availableLanguages;
+    $selectedLanguages = array_intersect($selectedLanguages, $availableLanguages);
+    if (empty($selectedLanguages))
+        $selectedLanguages = $availableLanguages;
+    
+    $languageFilterSql = "";
+    $languageFilterParams = [];
+    if (!empty($selectedLanguages) && count($selectedLanguages) < count($availableLanguages))
+    {
+        $languageFilterSql = "AND s.language IN (" . implode(',', array_fill(0, count($selectedLanguages), '?')) . ")";
+        $languageFilterParams = $selectedLanguages;
+    }
     
     $dateRangeStmt = $pdo->prepare("
         SELECT 
@@ -78,6 +101,7 @@ try
               {$dateFilterSql}
         ) latest ON s.commit_id = latest.max_commit_id
         WHERE s.project_id = ?
+        {$languageFilterSql}
         ORDER BY s.total_lines DESC
         ");
     } 
@@ -106,6 +130,7 @@ try
                   {$dateFilterSql}
             ) latest ON s.commit_id = latest.max_commit_id
             WHERE s.project_id = ?
+            {$languageFilterSql}
             ORDER BY metric_value DESC
             ");
         }
@@ -127,11 +152,12 @@ try
                       {$dateFilterSql}
                 ) latest ON s.commit_id = latest.max_commit_id
                 WHERE s.project_id = ?
+                {$languageFilterSql}
                 ORDER BY s.{$metricColumn} DESC
             ");
         }
     }
-    $languageParams = array_merge([$projectId], $dateFilterParams, [$projectId]);
+    $languageParams = array_merge([$projectId], $dateFilterParams, [$projectId], $languageFilterParams);
     $stmt->execute($languageParams);
     $languages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -174,6 +200,7 @@ try
             INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
             WHERE c.project_id = ? AND c.processing_state = 'done'
             {$dateFilterSql}
+            {$languageFilterSql}
             GROUP BY c.id, c.commit_hash, c.commit_timestamp
             ORDER BY c.commit_timestamp ASC
         ");
@@ -189,11 +216,12 @@ try
             INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
             WHERE c.project_id = ? AND c.processing_state = 'done'
             {$dateFilterSql}
+            {$languageFilterSql}
             GROUP BY c.id, c.commit_hash, c.commit_timestamp
             ORDER BY c.commit_timestamp ASC
         ");
     }
-    $params = array_merge([$projectId], $dateFilterParams);
+    $params = array_merge([$projectId], $dateFilterParams, $languageFilterParams);
     $stmt->execute($params);
     $allCommits = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
@@ -207,7 +235,7 @@ try
         WHERE c.project_id = ? AND c.processing_state = 'done'
         {$dateFilterSql}
     ");
-    $commitCountStmt->execute($params);
+    $commitCountStmt->execute(array_merge([$projectId], $dateFilterParams));
     $totalCommits = $commitCountStmt->fetchColumn();
     $totalCommitPages = ceil($totalCommits / $commitsPerPage);
 
@@ -249,7 +277,7 @@ try
             LIMIT {$commitsPerPage} OFFSET {$commitOffset}
         ");
     }
-    $stmt->execute($params);
+    $stmt->execute(array_merge([$projectId], $dateFilterParams));
     $commits = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 catch (PDOException $e)
@@ -468,7 +496,27 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
             border: 2px solid white;
             box-shadow: 0 2px 6px rgba(0,0,0,0.2);
         }
-        
+        .language-filter {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+    
+        .language-checkboxes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 10px;
+        }
+    
+        .language-checkboxes label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-weight: normal;
+            cursor: pointer;
+        }
         .date-tooltip {
             position: absolute;
             background: rgba(0, 0, 0, 0.8);
@@ -478,7 +526,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
             font-size: 12px;
             white-space: nowrap;
             pointer-events: none;
-            top: -30px;
+            top: 50px;  /* Push it further down */
             transform: translateX(-50%);
             z-index: 1000;
             opacity: 1;
@@ -545,7 +593,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                 <?php if (isset($_GET['end_date'])): ?>
                 <input type="hidden" name="end_date" value="<?= htmlspecialchars($_GET['end_date']) ?>">
                 <?php endif; ?>
-                <label for="metric" style="margin: 0; font-weight: bold;">Metric:</label>
+                <label for="metric" style="margin: 0; font-weight: bold;min-width: 150px;">Metric:</label>
                 <select name="metric" id="metric" onchange="this.form.submit()" style="width: auto; margin: 0;">
                     <?php foreach ($statsColumnsMap as $key => $config): ?>
                         <option value="<?= $key ?>" <?= $selectedMetric === $key ? 'selected' : '' ?>>
@@ -557,9 +605,35 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                     <?= htmlspecialchars($metricConfig['description']) ?>
                 </span>
             </form>
+            
+            <?php if (count($availableLanguages) > 1): ?>
+            <form method="GET" style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap; margin-top: 20px; margin-bottom: 20px;">
+                <input type="hidden" name="id" value="<?= $projectId ?>">
+                <input type="hidden" name="metric" value="<?= $selectedMetric ?>">
+                <?php if (isset($_GET['start_date'])): ?>
+                <input type="hidden" name="start_date" value="<?= htmlspecialchars($_GET['start_date']) ?>">
+                <?php endif; ?>
+                <?php if (isset($_GET['end_date'])): ?>
+                <input type="hidden" name="end_date" value="<?= htmlspecialchars($_GET['end_date']) ?>">
+                <?php endif; ?>
+                <label for="languageSelect" style="margin: 0; font-weight: bold;min-width: 150px;">Languages:</label>
+                <select id="languageSelect" name="langs[]" multiple style="width: 250px; height: 60px; margin: 0;">
+                    <?php foreach ($availableLanguages as $lang): ?>
+                        <option value="<?= htmlspecialchars($lang) ?>" <?= in_array($lang, $selectedLanguages) ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($lang) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <button type="submit" class="button" style="margin: 0;">Apply</button>
+                <button type="button" onclick="window.location.href='?id=<?= $projectId ?>&metric=<?= $selectedMetric ?><?= isset($_GET['start_date']) ? '&start_date=' . urlencode($_GET['start_date']) : '' ?><?= isset($_GET['end_date']) ? '&end_date=' . urlencode($_GET['end_date']) : '' ?>'" class="button secondary" style="margin: 0;">Reset</button>
+                <?php if (count($selectedLanguages) < count($availableLanguages)): ?>
+                    <span style="color: #007bff; font-size: 0.9em;"><?= count($selectedLanguages) ?>/<?= count($availableLanguages) ?> selected</span>
+                <?php endif; ?>
+            </form>
+            <?php endif; ?>
             <?php if (!empty($allCommits) && count($allCommits) >= 2 && $minDate && $maxDate): ?>
             <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
-                <label style="margin: 0; font-weight: bold; white-space: nowrap;">Filter Date Range:</label>
+                <label style="margin: 0; font-weight: bold; white-space: nowrap;min-width: 150px;">Filter Date Range:</label>
                 <div style="flex: 1; min-width: 300px; position: relative; height: 30px;">
                     <div class="date-range-track"></div>
                     <div class="date-range-highlight" id="rangeHighlight"></div>
@@ -966,6 +1040,36 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
     </div>
 
 <script>
+
+function selectAllLanguages() 
+{
+    document.querySelectorAll('.lang-checkbox').forEach(cb => cb.checked = true);
+}
+    
+function deselectAllLanguages() 
+{
+    document.querySelectorAll('.lang-checkbox').forEach(cb => cb.checked = false);
+}
+    
+function applyLanguageFilter() 
+{
+    const checked = Array.from(document.querySelectorAll('.lang-checkbox:checked')).map(cb => cb.value);
+    const url = new URL(window.location.href);
+    
+    if (checked.length === document.querySelectorAll('.lang-checkbox').length)
+        url.searchParams.delete('langs');
+    else if (checked.length > 0)
+        url.searchParams.set('langs', checked.join(','));
+    else
+    {
+        alert('Please select at least one language');
+        return;
+    }
+    
+    url.searchParams.delete('commit_page');
+    window.location.href = url.toString();
+}
+
 const commits = <?= json_encode($allCommits) ?>;
 if (window.location.hash === '#recent-commits')
 {
@@ -1004,7 +1108,8 @@ if (window.location.hash === '#recent-commits')
                         text: '<?= htmlspecialchars($metricConfig['yAxisLabel']) ?> Changed (sqrt scale)'
                     },
                     ticks: {
-                        callback: function(value) {
+                        callback: function(value) 
+                        {
                             const realValue = value >= 0 
                                 ? Math.pow(value, 2) 
                                 : -Math.pow(Math.abs(value), 2);
@@ -1026,7 +1131,8 @@ if (window.location.hash === '#recent-commits')
                 },
                 tooltip: {
                     callbacks: {
-                        label: function(context) {
+                        label: function(context) 
+                        {
                             const transformedValue = context.parsed.y;
                             const realValue = transformedValue >= 0 
                                 ? Math.pow(transformedValue, 2) 
@@ -1104,7 +1210,8 @@ if (window.location.hash === '#recent-commits')
                 },
                 tooltip: {
                     callbacks: {
-                        label: function(context) {
+                        label: function(context) 
+                        {
                             const transformedValue = context.parsed.y;
                             const realValue = Math.round(Math.pow(transformedValue, 2));
                             return 'Commits: ' + realValue;
@@ -1115,7 +1222,6 @@ if (window.location.hash === '#recent-commits')
         }
     });
     
-    // Total Lines Chart - Growth over time
     const totalLinesData = [];
     const totalLinesLabels = [];
     commits.forEach(c => 
@@ -1200,7 +1306,6 @@ if (window.location.hash === '#recent-commits')
     });
     <?php endif; ?>
     <?php if (!empty($languages)): ?>
-    // Code Composition Chart
     const compositionCtx = document.getElementById('compositionChart');
     new Chart(compositionCtx, {
         type: 'bar',
