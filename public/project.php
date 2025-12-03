@@ -39,7 +39,27 @@ try
     
     if (!$project)
         die("Project not found");
-        
+    
+    $dateRangeStmt = $pdo->prepare("
+        SELECT 
+            MIN(UNIX_TIMESTAMP(c.commit_timestamp)) as min_date,
+            MAX(UNIX_TIMESTAMP(c.commit_timestamp)) as max_date
+        FROM {$config['tables']['commits']} c
+        WHERE c.project_id = ? AND c.processing_state = 'done'
+    ");
+    $dateRangeStmt->execute([$projectId]);
+    $dateRange = $dateRangeStmt->fetch(PDO::FETCH_ASSOC);
+    $minDate = $dateRange['min_date'];
+    $maxDate = $dateRange['max_date'];
+    $filterStartDate = isset($_GET['start_date']) ? (int)$_GET['start_date'] : $minDate;
+    $filterEndDate = isset($_GET['end_date']) ? (int)$_GET['end_date'] : $maxDate;
+    $dateFilterSql = "";
+    $dateFilterParams = [];
+    if ($filterStartDate && $filterEndDate)
+    {
+        $dateFilterSql = "AND UNIX_TIMESTAMP(c.commit_timestamp) BETWEEN ? AND ?";
+        $dateFilterParams = [$filterStartDate, $filterEndDate];
+    }
     if ($selectedMetric === 'total_lines') 
     {
         $stmt = $pdo->prepare("
@@ -51,9 +71,11 @@ try
             s.blank_lines
         FROM {$config['tables']['statistics']} s
         INNER JOIN (
-            SELECT MAX(commit_id) as max_commit_id
-            FROM {$config['tables']['statistics']}
-            WHERE project_id = ?
+            SELECT MAX(c.id) as max_commit_id
+            FROM {$config['tables']['commits']} c
+            WHERE c.project_id = ? 
+              AND c.processing_state = 'done'
+              {$dateFilterSql}
         ) latest ON s.commit_id = latest.max_commit_id
         WHERE s.project_id = ?
         ORDER BY s.total_lines DESC
@@ -77,9 +99,11 @@ try
                 s.blank_lines
             FROM {$config['tables']['statistics']} s
             INNER JOIN (
-                SELECT MAX(commit_id) as max_commit_id
-                FROM {$config['tables']['statistics']}
-                WHERE project_id = ?
+                SELECT MAX(c.id) as max_commit_id
+                FROM {$config['tables']['commits']} c
+                WHERE c.project_id = ? 
+                  AND c.processing_state = 'done'
+                  {$dateFilterSql}
             ) latest ON s.commit_id = latest.max_commit_id
             WHERE s.project_id = ?
             ORDER BY metric_value DESC
@@ -96,18 +120,21 @@ try
                     s.blank_lines
                 FROM {$config['tables']['statistics']} s
                 INNER JOIN (
-                    SELECT MAX(commit_id) as max_commit_id
-                    FROM {$config['tables']['statistics']}
-                    WHERE project_id = ?
+                    SELECT MAX(c.id) as max_commit_id
+                    FROM {$config['tables']['commits']} c
+                    WHERE c.project_id = ? 
+                      AND c.processing_state = 'done'
+                      {$dateFilterSql}
                 ) latest ON s.commit_id = latest.max_commit_id
                 WHERE s.project_id = ?
                 ORDER BY s.{$metricColumn} DESC
             ");
         }
     }
-    $stmt->execute([$projectId, $projectId]);
+    $languageParams = array_merge([$projectId], $dateFilterParams, [$projectId]);
+    $stmt->execute($languageParams);
     $languages = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
+
     $totals = [
         'total_lines' => 0,
         'code_lines' => 0,
@@ -146,6 +173,7 @@ try
             FROM {$config['tables']['commits']} c
             INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
             WHERE c.project_id = ? AND c.processing_state = 'done'
+            {$dateFilterSql}
             GROUP BY c.id, c.commit_hash, c.commit_timestamp
             ORDER BY c.commit_timestamp ASC
         ");
@@ -160,11 +188,13 @@ try
             FROM {$config['tables']['commits']} c
             INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
             WHERE c.project_id = ? AND c.processing_state = 'done'
+            {$dateFilterSql}
             GROUP BY c.id, c.commit_hash, c.commit_timestamp
             ORDER BY c.commit_timestamp ASC
         ");
     }
-    $stmt->execute([$projectId]);
+    $params = array_merge([$projectId], $dateFilterParams);
+    $stmt->execute($params);
     $allCommits = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     $commitPage = isset($_GET['commit_page']) ? max(1, (int)$_GET['commit_page']) : 1;
@@ -175,8 +205,9 @@ try
         SELECT COUNT(DISTINCT c.id)
         FROM {$config['tables']['commits']} c
         WHERE c.project_id = ? AND c.processing_state = 'done'
+        {$dateFilterSql}
     ");
-    $commitCountStmt->execute([$projectId]);
+    $commitCountStmt->execute($params);
     $totalCommits = $commitCountStmt->fetchColumn();
     $totalCommitPages = ceil($totalCommits / $commitsPerPage);
 
@@ -184,38 +215,6 @@ try
     {
         $stmt = $pdo->prepare("
             SELECT
-                c.commit_timestamp,
-                CASE
-                    WHEN SUM(s.code_lines) > 0 THEN
-                        (SUM(s.{$metricColumn}) / (SUM(s.code_lines) / 1000.0))
-                    ELSE 0
-                END as metric_value
-            FROM {$config['tables']['commits']} c
-            INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
-            WHERE c.project_id = ? AND c.processing_state = 'done'
-            GROUP BY c.id, c.commit_timestamp
-            ORDER BY c.commit_timestamp ASC
-        ");
-    }
-    else
-    {
-        $stmt = $pdo->prepare("
-            SELECT
-                c.commit_timestamp,
-                SUM(s.{$metricColumn}) as metric_value
-            FROM {$config['tables']['commits']} c
-            INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
-            WHERE c.project_id = ? AND c.processing_state = 'done'
-            GROUP BY c.id, c.commit_timestamp
-            ORDER BY c.commit_timestamp ASC
-        ");
-    }
-    $stmt->execute([$projectId]);
-    $allCommits = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    if ($isComplexityMetric)
-    {
-        $stmt = $pdo->prepare("
-            SELECT
                 c.commit_hash,
                 c.commit_timestamp,
                 c.commit_user,
@@ -227,6 +226,7 @@ try
             FROM {$config['tables']['commits']} c
             LEFT JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
             WHERE c.project_id = ? AND c.processing_state = 'done'
+            {$dateFilterSql}
             GROUP BY c.id, c.commit_hash, c.commit_timestamp, c.commit_user
             ORDER BY c.commit_timestamp DESC
             LIMIT {$commitsPerPage} OFFSET {$commitOffset}
@@ -243,12 +243,13 @@ try
             FROM {$config['tables']['commits']} c
             LEFT JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
             WHERE c.project_id = ? AND c.processing_state = 'done'
+            {$dateFilterSql}
             GROUP BY c.id, c.commit_hash, c.commit_timestamp, c.commit_user
             ORDER BY c.commit_timestamp DESC
             LIMIT {$commitsPerPage} OFFSET {$commitOffset}
         ");
     }
-    $stmt->execute([$projectId]);
+    $stmt->execute($params);
     $commits = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 catch (PDOException $e)
@@ -338,8 +339,8 @@ function groupCommitsByInterval($commits, $intervalDays)
 $primaryLanguage = !empty($languages) ? $languages[0]['language'] : 'PHP';
 $estimateBase = $selectedMetric === 'total_lines' ? $totals['code_lines'] : $totals['metric_value'];
 $estimates = generateEstimates($estimateBase, $primaryLanguage);
-$hourlyRate = 75; // USD per hour
-$hoursPerMonth = 160; // Standard work month
+$hourlyRate = 75;
+$hoursPerMonth = 160;
 $grouping = determineOptimalGrouping($allCommits);
 $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
 ?>
@@ -413,6 +414,75 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
             background: #fff3cd;
             font-weight: bold;
         }
+        .date-range-track {
+            position: absolute;
+            width: 100%;
+            height: 6px;
+            background: #dee2e6;
+            border-radius: 3px;
+            top: 12px;
+        }
+        
+        .date-range-highlight {
+            position: absolute;
+            height: 6px;
+            background: #007bff;
+            border-radius: 3px;
+            top: 12px;
+            pointer-events: none;
+        }
+        
+        input[type="range"]#rangeStart,
+        input[type="range"]#rangeEnd {
+            position: absolute;
+            width: 100%;
+            height: 6px;
+            background: transparent;
+            pointer-events: none;
+            -webkit-appearance: none;
+            top: 12px;
+            margin: 0;
+        }
+        
+        input[type="range"]#rangeStart::-webkit-slider-thumb,
+        input[type="range"]#rangeEnd::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            pointer-events: all;
+            width: 20px;
+            height: 20px;
+            background: #007bff;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        
+        input[type="range"]#rangeStart::-moz-range-thumb,
+        input[type="range"]#rangeEnd::-moz-range-thumb {
+            pointer-events: all;
+            width: 20px;
+            height: 20px;
+            background: #007bff;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        
+        .date-tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            pointer-events: none;
+            top: -30px;
+            transform: translateX(-50%);
+            z-index: 1000;
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
@@ -433,7 +503,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
     </header>
 
     <div class="container">
-		<div class="card">
+        <div class="card">
             <?php if (!empty($project['image'])): ?>
                 <div style="display: grid; grid-template-columns: 150px 1fr; gap: 20px; align-items: start;">
                     <img src="../data/project_images/<?= htmlspecialchars($project['image']) ?>" 
@@ -467,8 +537,14 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         </div>
         <div class="card">
             <h2>📊 View Metrics</h2>
-            <form method="GET" style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+            <form method="GET" style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;" onsubmit="window.location.hash = '';">
                 <input type="hidden" name="id" value="<?= $projectId ?>">
+                <?php if (isset($_GET['start_date'])): ?>
+                <input type="hidden" name="start_date" value="<?= htmlspecialchars($_GET['start_date']) ?>">
+                <?php endif; ?>
+                <?php if (isset($_GET['end_date'])): ?>
+                <input type="hidden" name="end_date" value="<?= htmlspecialchars($_GET['end_date']) ?>">
+                <?php endif; ?>
                 <label for="metric" style="margin: 0; font-weight: bold;">Select Metric:</label>
                 <select name="metric" id="metric" onchange="this.form.submit()" style="width: auto; margin: 0;">
                     <?php foreach ($statsColumnsMap as $key => $config): ?>
@@ -481,8 +557,32 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                     <?= htmlspecialchars($metricConfig['description']) ?>
                 </span>
             </form>
+            <?php if (!empty($allCommits) && count($allCommits) >= 2 && $minDate && $maxDate): ?>
+            <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                <label style="margin: 0; font-weight: bold; white-space: nowrap;">Filter Date Range:</label>
+                <div style="flex: 1; min-width: 300px; position: relative; height: 30px;">
+                    <div class="date-range-track"></div>
+                    <div class="date-range-highlight" id="rangeHighlight"></div>
+                    <input type="range" 
+                           id="rangeStart" 
+                           min="<?= $minDate ?>" 
+                           max="<?= $maxDate ?>" 
+                           value="<?= $filterStartDate ?>"
+                           step="86400">
+                    <input type="range" 
+                           id="rangeEnd" 
+                           min="<?= $minDate ?>" 
+                           max="<?= $maxDate ?>" 
+                           value="<?= $filterEndDate ?>"
+                           step="86400">
+                    <div id="dateTooltipStart" class="date-tooltip"></div>
+                    <div id="dateTooltipEnd" class="date-tooltip"></div>
+                </div>
+                <button onclick="applyDateFilter()" class="button" style="margin: 0;">Apply</button>
+                <button onclick="resetDateFilter()" class="button secondary" style="margin: 0;">Reset</button>
+            </div>
+            <?php endif; ?>
         </div>
-
         <div class="card">
             <h2>Language Breakdown</h2>
             <?php if (empty($languages)): ?>
@@ -813,7 +913,7 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         <?php endif; ?>
 
 
-        <div class="card">
+        <div class="card" id="recent-commits">
             <h2>Recent Commits</h2>
             <?php if (empty($commits)): ?>
                 <p>No commits tracked yet.</p>
@@ -839,18 +939,22 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                     </tbody>
                 </table>
                 <?php if ($totalCommitPages > 1): ?>
-                    <div style="margin-top: 20px; text-align: center;">
-                        <?php if ($commitPage > 1): ?>
-                            <a href="?id=<?= $projectId ?>&metric=<?= $selectedMetric ?>&commit_page=<?= $commitPage - 1 ?>" class="button">← Previous</a>
-                        <?php endif; ?>
-                        
-                        <span style="margin: 0 15px; color: #6c757d;">
+                    <div style="margin-top: 20px;">
+                        <div style="text-align: center; margin-bottom: 10px; color: #6c757d;">
                             Page <?= $commitPage ?> of <?= $totalCommitPages ?> (<?= number_format($totalCommits) ?> total commits)
-                        </span>
-                        
-                        <?php if ($commitPage < $totalCommitPages): ?>
-                            <a href="?id=<?= $projectId ?>&metric=<?= $selectedMetric ?>&commit_page=<?= $commitPage + 1 ?>" class="button">Next →</a>
-                        <?php endif; ?>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label for="pageSlider" style="white-space: nowrap; font-weight: bold; margin: 0;">Select Page:</label>
+                            <input 
+                                type="range" 
+                                id="pageSlider" 
+                                min="1" 
+                                max="<?= $totalCommitPages ?>" 
+                                value="<?= $commitPage ?>" 
+                                style="flex: 1; cursor: pointer;"
+                                oninput="document.getElementById('pageValue').textContent = this.value">
+                            <span id="pageValue" style="min-width: 30px; text-align: right; font-weight: bold;"><?= $commitPage ?></span>
+                        </div>
                     </div>
                 <?php endif; ?>
             <?php endif; ?>
@@ -862,7 +966,14 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
     </div>
 
 <script>
-	const commits = <?= json_encode($allCommits) ?>;
+const commits = <?= json_encode($allCommits) ?>;
+if (window.location.hash === '#recent-commits')
+{
+    setTimeout(function() 
+    {
+        history.replaceState(null, null, window.location.pathname + window.location.search);
+    }, 100);
+}
 <?php if (!empty($allCommits) && count($allCommits) >= 1): ?>
     const commitData = {
         labels: <?= json_encode($groupedData['labels']) ?>,
@@ -1144,7 +1255,79 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
         }
     });
     <?php endif; ?>
-    
+    <?php if (!empty($allCommits) && count($allCommits) >= 2 && $minDate && $maxDate): ?>
+        const rangeStart = document.getElementById('rangeStart');
+        const rangeEnd = document.getElementById('rangeEnd');
+        const rangeHighlight = document.getElementById('rangeHighlight');
+        const dateTooltipStart = document.getElementById('dateTooltipStart');
+        const dateTooltipEnd = document.getElementById('dateTooltipEnd');
+        const minDate = <?= $minDate ?>;
+        const maxDate = <?= $maxDate ?>;
+        
+        function formatDate(timestamp) 
+        {
+            const date = new Date(timestamp * 1000);
+            return date.toISOString().split('T')[0];
+        }
+        
+        function updateTooltipPosition(tooltip, input, timestamp) 
+        {
+            const rect = input.parentElement.getBoundingClientRect();
+            const percent = ((timestamp - minDate) / (maxDate - minDate)) * 100;
+            const left = (rect.width * percent / 100);
+            tooltip.textContent = formatDate(timestamp);
+            tooltip.style.left = left + 'px';
+        }
+        
+        function updateRangeHighlight() 
+        {
+            const startVal = parseInt(rangeStart.value);
+            const endVal = parseInt(rangeEnd.value);
+            
+            if (startVal > endVal) 
+            {
+                rangeStart.value = endVal;
+                return;
+            }
+            const percentStart = ((startVal - minDate) / (maxDate - minDate)) * 100;
+            const percentEnd = ((endVal - minDate) / (maxDate - minDate)) * 100;
+            rangeHighlight.style.left = percentStart + '%';
+            rangeHighlight.style.width = (percentEnd - percentStart) + '%';
+            updateTooltipPosition(dateTooltipStart, rangeStart, startVal);
+            updateTooltipPosition(dateTooltipEnd, rangeEnd, endVal);
+        }
+        
+        rangeStart.addEventListener('input', updateRangeHighlight);
+        rangeEnd.addEventListener('input', updateRangeHighlight);
+        
+        function applyDateFilter() 
+        {
+            const start = rangeStart.value;
+            const end = rangeEnd.value;
+            const url = new URL(window.location.href);
+            url.searchParams.set('start_date', start);
+            url.searchParams.set('end_date', end);
+            url.searchParams.delete('commit_page');
+            window.location.href = url.toString();
+        }
+        
+        function resetDateFilter() 
+        {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('start_date');
+            url.searchParams.delete('end_date');
+            window.location.href = url.toString();
+        }
+        updateRangeHighlight();
+    <?php endif; ?>
+        const pageSliderElement = document.getElementById('pageSlider');
+        if (pageSliderElement) 
+        {
+            pageSliderElement.addEventListener('mouseup', function() 
+            {
+                window.location.href='?id=<?= $projectId ?>&metric=<?= $selectedMetric ?><?= isset($_GET['start_date']) ? '&start_date=' . urlencode($_GET['start_date']) : '' ?><?= isset($_GET['end_date']) ? '&end_date=' . urlencode($_GET['end_date']) : '' ?>&commit_page=' + this.value + '#recent-commits';
+            });
+        }
     </script>
 
     <footer style="text-align: center; padding: 20px; margin-top: 40px; font-size: 0.8em; color: #999;">
