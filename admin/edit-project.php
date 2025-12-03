@@ -322,4 +322,7 @@ catch (PDOException $e)
         }
         </script>
     </body>
+    <footer style="text-align: center; padding: 20px; margin-top: 40px; font-size: 0.8em; color: #999;">
+        <span>CodePhacts v<?= $config['version'] ?? '1.0.0' ?></span>
+    </footer>
 </html>

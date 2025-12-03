@@ -19,6 +19,7 @@
  */
 
 return [
+    'version' => '1.0.0',
     'admin_password' => 'PASSWORD',  // please change this
     'db' => [
         'type'     => 'sqlite', // sqlite or mysql

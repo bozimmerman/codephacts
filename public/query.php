@@ -747,5 +747,7 @@ $isDeltaMode = isset($isDeltaCalculation) ? $isDeltaCalculation : false;
 </body>
 <footer style="text-align: center; padding: 20px; margin-top: 40px; font-size: 0.8em; color: #999;">
     <a href="../admin/login.php" style="color: #999; text-decoration: none;">admin</a>
+    <span style="margin: 0 10px;">•</span>
+    <span>CodePhacts v<?= $config['version'] ?? '1.0.0' ?></span>
 </footer>
 </html>

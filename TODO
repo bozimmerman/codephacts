@@ -21,6 +21,7 @@ consistencyScore = (
     patternConsistency +          // Similar structures using similar approaches
     documentationUniformity       // All similar elements documented similarly
 ) / 4
+Halstead metrics (effort / difficulty / estimated bugs / time / volume / vocabulary), logical LOC (lloc), object oriented structure metrics
 Export to CSV: Add export button to any table
 Dark mode: Toggle for the interface
 Alerts: Email/Slack when update completes
