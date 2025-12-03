@@ -88,20 +88,20 @@ try
         else
         {
             $stmt = $pdo->prepare("
-            SELECT
-                s.language,
-                s.total_lines,
-                s.{$metricColumn} as metric_value,
-                s.comment_lines,
-                s.blank_lines
-            FROM {$config['tables']['statistics']} s
-            INNER JOIN (
-                SELECT MAX(commit_id) as max_commit_id
-                FROM {$config['tables']['statistics']}
-                WHERE project_id = ?
-            ) latest ON s.commit_id = latest.max_commit_id
-            WHERE s.project_id = ?
-            ORDER BY s.{$metricColumn} DESC
+                SELECT
+                    s.language,
+                    s.total_lines,
+                    s.{$metricColumn} as metric_value,
+                    s.comment_lines,
+                    s.blank_lines
+                FROM {$config['tables']['statistics']} s
+                INNER JOIN (
+                    SELECT MAX(commit_id) as max_commit_id
+                    FROM {$config['tables']['statistics']}
+                    WHERE project_id = ?
+                ) latest ON s.commit_id = latest.max_commit_id
+                WHERE s.project_id = ?
+                ORDER BY s.{$metricColumn} DESC
             ");
         }
     }
@@ -135,33 +135,33 @@ try
     if ($isComplexityMetric) 
     {
         $stmt = $pdo->prepare("
-        SELECT
-            c.commit_hash,
-            c.commit_timestamp,
-            CASE
-                WHEN SUM(s.code_lines) > 0 THEN
-                    (SUM(s.{$metricColumn}) / (SUM(s.code_lines) / 1000.0))
-                ELSE 0
-            END as metric_value
-        FROM {$config['tables']['commits']} c
-        INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
-        WHERE c.project_id = ? AND c.processing_state = 'done'
-        GROUP BY c.id, c.commit_hash, c.commit_timestamp
-        ORDER BY c.commit_timestamp ASC
+            SELECT
+                c.commit_hash,
+                c.commit_timestamp,
+                CASE
+                    WHEN SUM(s.code_lines) > 0 THEN
+                        (SUM(s.{$metricColumn}) / (SUM(s.code_lines) / 1000.0))
+                    ELSE 0
+                END as metric_value
+            FROM {$config['tables']['commits']} c
+            INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+            WHERE c.project_id = ? AND c.processing_state = 'done'
+            GROUP BY c.id, c.commit_hash, c.commit_timestamp
+            ORDER BY c.commit_timestamp ASC
         ");
     }
     else
     {
         $stmt = $pdo->prepare("
-        SELECT
-            c.commit_hash,
-            c.commit_timestamp,
-            SUM(s.{$metricColumn}) as metric_value
-        FROM {$config['tables']['commits']} c
-        INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
-        WHERE c.project_id = ? AND c.processing_state = 'done'
-        GROUP BY c.id, c.commit_hash, c.commit_timestamp
-        ORDER BY c.commit_timestamp ASC
+            SELECT
+                c.commit_hash,
+                c.commit_timestamp,
+                SUM(s.{$metricColumn}) as metric_value
+            FROM {$config['tables']['commits']} c
+            INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+            WHERE c.project_id = ? AND c.processing_state = 'done'
+            GROUP BY c.id, c.commit_hash, c.commit_timestamp
+            ORDER BY c.commit_timestamp ASC
         ");
     }
     $stmt->execute([$projectId]);
@@ -172,28 +172,82 @@ try
     $commitOffset = ($commitPage - 1) * $commitsPerPage;
     
     $commitCountStmt = $pdo->prepare("
-    SELECT COUNT(*)
-    FROM {$config['tables']['commits']} c
-    INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
-    WHERE c.project_id = ? AND c.processing_state = 'done'
+        SELECT COUNT(DISTINCT c.id)
+        FROM {$config['tables']['commits']} c
+        WHERE c.project_id = ? AND c.processing_state = 'done'
     ");
     $commitCountStmt->execute([$projectId]);
     $totalCommits = $commitCountStmt->fetchColumn();
     $totalCommitPages = ceil($totalCommits / $commitsPerPage);
-    
-    $stmt = $pdo->prepare("
-    SELECT
-        c.commit_hash,
-        c.commit_timestamp,
-        c.commit_user,
-        SUM(s.{$metricColumn}) as metric_value
-    FROM {$config['tables']['commits']} c
-    LEFT JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
-    WHERE c.project_id = ? AND c.processing_state = 'done'
-    GROUP BY c.id, c.commit_hash, c.commit_timestamp
-    ORDER BY c.commit_timestamp DESC
-    LIMIT {$commitsPerPage} OFFSET {$commitOffset}
-    ");
+
+    if ($isComplexityMetric)
+    {
+        $stmt = $pdo->prepare("
+            SELECT
+                c.commit_timestamp,
+                CASE
+                    WHEN SUM(s.code_lines) > 0 THEN
+                        (SUM(s.{$metricColumn}) / (SUM(s.code_lines) / 1000.0))
+                    ELSE 0
+                END as metric_value
+            FROM {$config['tables']['commits']} c
+            INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+            WHERE c.project_id = ? AND c.processing_state = 'done'
+            GROUP BY c.id, c.commit_timestamp
+            ORDER BY c.commit_timestamp ASC
+        ");
+    }
+    else
+    {
+        $stmt = $pdo->prepare("
+            SELECT
+                c.commit_timestamp,
+                SUM(s.{$metricColumn}) as metric_value
+            FROM {$config['tables']['commits']} c
+            INNER JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+            WHERE c.project_id = ? AND c.processing_state = 'done'
+            GROUP BY c.id, c.commit_timestamp
+            ORDER BY c.commit_timestamp ASC
+        ");
+    }
+    $stmt->execute([$projectId]);
+    $allCommits = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if ($isComplexityMetric)
+    {
+        $stmt = $pdo->prepare("
+            SELECT
+                c.commit_hash,
+                c.commit_timestamp,
+                c.commit_user,
+                CASE
+                    WHEN SUM(s.code_lines) > 0 THEN
+                        (SUM(s.{$metricColumn}) / (SUM(s.code_lines) / 1000.0))
+                    ELSE 0
+                END as metric_value
+            FROM {$config['tables']['commits']} c
+            LEFT JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+            WHERE c.project_id = ? AND c.processing_state = 'done'
+            GROUP BY c.id, c.commit_hash, c.commit_timestamp, c.commit_user
+            ORDER BY c.commit_timestamp DESC
+            LIMIT {$commitsPerPage} OFFSET {$commitOffset}
+        ");
+    }
+    else
+    {
+        $stmt = $pdo->prepare("
+            SELECT
+                c.commit_hash,
+                c.commit_timestamp,
+                c.commit_user,
+                SUM(s.{$metricColumn}) as metric_value
+            FROM {$config['tables']['commits']} c
+            LEFT JOIN {$config['tables']['statistics']} s ON c.id = s.commit_id
+            WHERE c.project_id = ? AND c.processing_state = 'done'
+            GROUP BY c.id, c.commit_hash, c.commit_timestamp, c.commit_user
+            ORDER BY c.commit_timestamp DESC
+            LIMIT {$commitsPerPage} OFFSET {$commitOffset}
+        ");
+    }
     $stmt->execute([$projectId]);
     $commits = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
