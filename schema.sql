@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS projects
     auth_username VARCHAR(255) NULL,
     auth_password TEXT NULL,
     auth_ssh_key_path VARCHAR(500),
-    image_path VARCHAR(255) NULL,
+    image VARCHAR(255) NULL,
     description VARCHAR(500) NULL,
     last_updated DATETIME NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
