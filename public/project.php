@@ -690,8 +690,8 @@ $groupedData = groupCommitsByInterval($allCommits, $grouping['intervalDays']);
                                 <td><?= number_format($lang['comment_lines'] ?? 0) ?></td>
                                 <td><?= number_format($lang['blank_lines'] ?? 0) ?></td>
                                 <?php 
-                                $percentageBase = $selectedMetric === 'total_lines' ? $totals['code_lines'] : $totals['metric_value'];
-                                $langValue = $selectedMetric === 'total_lines' ? $lang['code_lines'] : $lang['metric_value'];
+                                $percentageBase = $selectedMetric === 'total_lines' ? $totals['total_lines'] : $totals['metric_value'];
+                                $langValue = $selectedMetric === 'total_lines' ? $lang['total_lines'] : $lang['metric_value'];
                                 ?>
                                 <td><?= $percentageBase > 0 ? number_format(($langValue / $percentageBase) * 100, 1) : '0.0' ?>%</td>
                             </tr>
