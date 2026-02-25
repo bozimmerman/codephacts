@@ -1,5 +1,5 @@
 Total lines should have overlap for comments and blank lines on line change chart
-Project breakdown per contributor (perhaps "project" drop down on contributors page? defaults 'All', but if given, data is limited)
+Contributor models should be based entirely on commits from the contributor, if not already
 
 New chart types to consider:
 - Heatmap showing commit activity by day/week/month
